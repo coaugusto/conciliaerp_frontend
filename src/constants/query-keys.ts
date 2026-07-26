@@ -1,0 +1,1 @@
+export const queryKeys = { dashboard:["dashboard"] as const, connections:["connections"] as const, dataSources:["data-sources"] as const, rules:["rules"] as const, executions:["executions"] as const, alerts:["alerts"] as const };
