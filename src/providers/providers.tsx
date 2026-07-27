@@ -14,9 +14,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(() => { const s = getStored(); return s ? JSON.parse(s) : null; });
   const login = async (email: string, password: string) => {
     if (!useMocks()) {
-      const response = await api.post<ApiResponse<{ accessToken:string; user:User }>>("/auth/login", { email, password });
+      const response = await api.post<ApiResponse<{ accessToken:string; user:User; tenants?:{id:string}[] }>>("/auth/login", { email, password });
       const payload = response.data.data;
-      localStorage.setItem("concilia_user", JSON.stringify(payload.user)); localStorage.setItem("concilia_token", payload.accessToken); setUser(payload.user);
+      let token = payload.accessToken; const tenantId = payload.tenants?.[0]?.id;
+      if (tenantId) { const selection = await api.post<ApiResponse<{accessToken:string}>>("/auth/select-tenant", { tenantId }); token = selection.data.data.accessToken; localStorage.setItem("concilia_tenant_id", tenantId); }
+      localStorage.setItem("concilia_user", JSON.stringify(payload.user)); localStorage.setItem("concilia_token", token); setUser(payload.user);
       return payload.user;
     }
     await new Promise(r => setTimeout(r, 650));
@@ -24,7 +26,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
     const next: User = { name: email.startsWith("analista") ? "Mariana Costa" : "Carlos Almeida", email, role: email.startsWith("analista") ? "ANALYST" : "ADMIN", mustChangePassword: password === "primeiroacesso" };
     localStorage.setItem("concilia_user", JSON.stringify(next)); localStorage.setItem("concilia_token", "mock-jwt-token"); setUser(next); return next;
   };
-  const logout = () => { localStorage.removeItem("concilia_user"); localStorage.removeItem("concilia_token"); setUser(null); };
+  const logout = () => { localStorage.removeItem("concilia_user"); localStorage.removeItem("concilia_token"); localStorage.removeItem("concilia_tenant_id"); setUser(null); };
   const changePassword = () => { if (!user) return; const next = { ...user, mustChangePassword: false }; localStorage.setItem("concilia_user", JSON.stringify(next)); setUser(next); };
   return <QueryClientProvider client={client}><AuthContext.Provider value={{ user, login, logout, changePassword }}>{children}</AuthContext.Provider></QueryClientProvider>;
 }

@@ -1,0 +1,3 @@
+import { api } from "./api/client";
+export type Plan={id:string;code:string;name:string;description?:string;monthlyPriceCents:number;currency:string;limits:Record<string,number>;features:string[]};
+export const commercialService={plans:async()=> (await api.get("/commercial/plans")).data.data as Plan[],subscription:async()=> (await api.get("/commercial/subscription")).data.data,usage:async()=> (await api.get("/commercial/usage")).data.data,subscribe:async(planCode:string,payerEmail?:string)=>(await api.post("/commercial/subscription",{planCode,payerEmail})).data.data,createApiKey:async(name:string,scopes:string[])=>(await api.post("/commercial/api-keys",{name,scopes})).data.data};
