@@ -17,7 +17,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
       const response = await api.post<ApiResponse<{ accessToken:string; user:User; tenants?:{id:string}[] }>>("/auth/login", { email, password });
       const payload = response.data.data;
       let token = payload.accessToken; const tenantId = payload.tenants?.[0]?.id;
-      if (tenantId) { const selection = await api.post<ApiResponse<{accessToken:string}>>("/auth/select-tenant", { tenantId }); token = selection.data.data.accessToken; localStorage.setItem("concilia_tenant_id", tenantId); }
+      // The tenant-selection endpoint is protected. Persist the freshly issued
+      // login token before the request so the interceptor never reuses a stale
+      // token left by a previous session.
+      localStorage.setItem("concilia_token", token);
+      try {
+        if (tenantId) { const selection = await api.post<ApiResponse<{accessToken:string}>>("/auth/select-tenant", { tenantId }); token = selection.data.data.accessToken; localStorage.setItem("concilia_tenant_id", tenantId); }
+      } catch (error) { localStorage.removeItem("concilia_token"); localStorage.removeItem("concilia_tenant_id"); throw error; }
       localStorage.setItem("concilia_user", JSON.stringify(payload.user)); localStorage.setItem("concilia_token", token); setUser(payload.user);
       return payload.user;
     }

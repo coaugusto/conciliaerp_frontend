@@ -1,6 +1,6 @@
 import axios from "axios";
 export type ApiResponse<T> = { success: boolean; data: T; message: string };
-export const api = axios.create({ baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001", timeout: 12_000 });
+export const api = axios.create({ baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api/v1", timeout: 12_000 });
 export function getApiErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const message = error.response?.data?.error?.message ?? error.response?.data?.message;
