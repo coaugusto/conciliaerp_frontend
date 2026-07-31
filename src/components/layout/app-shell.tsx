@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, BookOpen, ChartNoAxesCombined, ChevronDown, ChevronLeft, Database, Gauge, Handshake, Landmark, ListChecks, LogOut, Menu, PlayCircle, Search, ShieldCheck, Store, Workflow, CreditCard } from "lucide-react";
+import { Bell, BookOpen, ChartNoAxesCombined, ChevronDown, ChevronLeft, Database, Gauge, Handshake, Landmark, ListChecks, LogOut, Menu, PlayCircle, Search, ShieldCheck, Store, Workflow, CreditCard, Code2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/providers/providers";
 import { cn } from "@/utils/cn";
@@ -20,6 +20,7 @@ const navigation = [
   { href: "/rules", label: "Regras", icon: ListChecks, admin: true },
   { href: "/data-sources", label: "Fontes de dados", icon: Database, admin: true },
   { href: "/connections", label: "Conexões ERP", icon: ShieldCheck, admin: true },
+  { href: "/connector-queries", label: "Consultas do Connector", icon: Code2, admin: true },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -32,7 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) router.replace("/login");
     else if (user.mustChangePassword) router.replace("/change-password");
-    else if (user.role === "ANALYST" && ["/rules", "/data-sources", "/connections"].some((item) => path.startsWith(item))) router.replace("/dashboard");
+    else if (user.role === "ANALYST" && ["/rules", "/data-sources", "/connections", "/connector-queries"].some((item) => path.startsWith(item))) router.replace("/dashboard");
   }, [user, path, router]);
 
   if (!user) return null;
