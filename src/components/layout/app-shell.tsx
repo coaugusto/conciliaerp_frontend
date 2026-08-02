@@ -21,6 +21,7 @@ const navigation = [
   { href: "/data-sources", label: "Fontes de dados", icon: Database, admin: true },
   { href: "/connections", label: "Conexões ERP", icon: ShieldCheck, admin: true },
   { href: "/connector-queries", label: "Consultas do Connector", icon: Code2, admin: true },
+  { href: "/connector-data", label: "Dados extraídos", icon: Database },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
