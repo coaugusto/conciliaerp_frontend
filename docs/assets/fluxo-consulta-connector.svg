@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="310" viewBox="0 0 1120 310" role="img" aria-labelledby="title desc">
+  <title id="title">Fluxo de uma consulta do Connector</title>
+  <desc id="desc">O catálogo local do Connector anuncia uma consulta ao backend, que agenda um job. O Connector executa o SQL no ERP e envia lotes de resultado para o backend.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#075d70"/></marker>
+  </defs>
+  <rect width="1120" height="310" fill="#f8fafc"/>
+  <g font-family="Arial, sans-serif">
+    <g transform="translate(30 76)">
+      <rect width="220" height="150" rx="14" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+      <text x="110" y="38" text-anchor="middle" font-size="18" font-weight="700" fill="#0c4a6e">1. Connector</text>
+      <text x="18" y="72" font-size="14" fill="#164e63">catalog.json</text>
+      <text x="18" y="97" font-size="14" fill="#164e63">arquivo .sql</text>
+      <text x="18" y="122" font-size="14" fill="#164e63">código + versão + hash</text>
+    </g>
+    <g transform="translate(310 76)">
+      <rect width="220" height="150" rx="14" fill="#ecfdf5" stroke="#059669" stroke-width="2"/>
+      <text x="110" y="38" text-anchor="middle" font-size="18" font-weight="700" fill="#065f46">2. Backend</text>
+      <text x="18" y="72" font-size="14" fill="#065f46">heartbeat valida</text>
+      <text x="18" y="97" font-size="14" fill="#065f46">publicação da definição</text>
+      <text x="18" y="122" font-size="14" fill="#065f46">job pendente</text>
+    </g>
+    <g transform="translate(590 76)">
+      <rect width="220" height="150" rx="14" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+      <text x="110" y="38" text-anchor="middle" font-size="18" font-weight="700" fill="#92400e">3. ERP local</text>
+      <text x="18" y="72" font-size="14" fill="#78350f">Connector busca o job</text>
+      <text x="18" y="97" font-size="14" fill="#78350f">executa SELECT Oracle</text>
+      <text x="18" y="122" font-size="14" fill="#78350f">cria lotes locais</text>
+    </g>
+    <g transform="translate(870 76)">
+      <rect width="220" height="150" rx="14" fill="#f3e8ff" stroke="#9333ea" stroke-width="2"/>
+      <text x="110" y="38" text-anchor="middle" font-size="18" font-weight="700" fill="#6b21a8">4. Dados extraídos</text>
+      <text x="18" y="72" font-size="14" fill="#581c87">upload idempotente</text>
+      <text x="18" y="97" font-size="14" fill="#581c87">armazenamento por lote</text>
+      <text x="18" y="122" font-size="14" fill="#581c87">consulta e exportação</text>
+    </g>
+    <path d="M250 151 H307" stroke="#075d70" stroke-width="3" marker-end="url(#arrow)"/>
+    <path d="M530 151 H587" stroke="#075d70" stroke-width="3" marker-end="url(#arrow)"/>
+    <path d="M810 151 H867" stroke="#075d70" stroke-width="3" marker-end="url(#arrow)"/>
+    <text x="280" y="136" text-anchor="middle" font-size="12" fill="#475569">heartbeat</text>
+    <text x="560" y="136" text-anchor="middle" font-size="12" fill="#475569">agenda</text>
+    <text x="840" y="136" text-anchor="middle" font-size="12" fill="#475569">lotes</text>
+    <text x="560" y="274" text-anchor="middle" font-size="13" fill="#475569">O SQL nunca sai do Connector para a API central.</text>
+  </g>
+</svg>

@@ -7,13 +7,13 @@ type User = { name: string; email: string; role: "ADMIN" | "ANALYST"; mustChange
 type AuthContextValue = { user: User | null; login: (email: string, password: string) => Promise<User>; logout: () => void; changePassword: () => void };
 const AuthContext = createContext<AuthContextValue | null>(null);
 const getStored = () => typeof window === "undefined" ? null : localStorage.getItem("concilia_user");
-const useMocks = () => process.env.NEXT_PUBLIC_USE_MOCKS === "true";
+const isMocksEnabled = () => process.env.NEXT_PUBLIC_USE_MOCKS === "true";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [client] = useState(() => new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30_000 } } }));
   const [user, setUser] = useState<User | null>(() => { const s = getStored(); return s ? JSON.parse(s) : null; });
   const login = async (email: string, password: string) => {
-    if (!useMocks()) {
+    if (!isMocksEnabled()) {
       const response = await api.post<ApiResponse<{ accessToken:string; user:User; tenants?:{id:string}[] }>>("/auth/login", { email, password });
       const payload = response.data.data;
       let token = payload.accessToken; const tenantId = payload.tenants?.[0]?.id;

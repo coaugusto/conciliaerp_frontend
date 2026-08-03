@@ -1,5 +1,9 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Documentação operacional
+
+- [Criação e publicação de consultas do Connector](./docs/consultas-connector.md)
+
 ## Getting Started
 
 First, run the development server:

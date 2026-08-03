@@ -21,6 +21,7 @@ const navigation = [
   { href: "/data-sources", label: "Fontes de dados", icon: Database, admin: true },
   { href: "/connections", label: "Conexões ERP", icon: ShieldCheck, admin: true },
   { href: "/connector-queries", label: "Consultas do Connector", icon: Code2, admin: true },
+  { href: "/documentation/connector-queries", label: "Documentação do Connector", icon: BookOpen, admin: true },
   { href: "/connector-data", label: "Dados extraídos", icon: Database },
 ];
 
@@ -34,7 +35,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user) router.replace("/login");
     else if (user.mustChangePassword) router.replace("/change-password");
-    else if (user.role === "ANALYST" && ["/rules", "/data-sources", "/connections", "/connector-queries"].some((item) => path.startsWith(item))) router.replace("/dashboard");
+    else if (user.role === "ANALYST" && ["/rules", "/data-sources", "/connections", "/connector-queries", "/documentation"].some((item) => path.startsWith(item))) router.replace("/dashboard");
   }, [user, path, router]);
 
   if (!user) return null;
@@ -55,7 +56,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </label>
           <div className="hidden min-w-0 flex-1 truncate text-xs text-slate-500 xl:block">Início <span className="px-1">›</span> {activeItem?.label ?? "Concilia ERP"}</div>
           <div className="ml-auto flex items-center gap-3 text-xs text-slate-500">
-            <button className="hidden items-center gap-1.5 hover:text-[#176a84] md:flex"><BookOpen size={16} className="text-cyan-600" />Documentação</button>
+            {user.role === "ADMIN" && <Link href="/documentation/connector-queries" className="hidden items-center gap-1.5 hover:text-[#176a84] md:flex"><BookOpen size={16} className="text-cyan-600" />Documentação</Link>}
             <button className="relative rounded p-2 hover:bg-slate-100" aria-label="Notificações"><Bell size={18} /><i className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-amber-400" /></button>
             <button className="flex items-center gap-1 rounded px-2 py-1.5 hover:bg-slate-100"><span className="hidden text-right sm:block"><b className="block text-sm font-semibold text-slate-700">{user.name}</b><span>{user.role === "ADMIN" ? "Administrador" : "Analista"}</span></span><ChevronDown size={15} /></button>
             <button onClick={() => { logout(); router.replace("/login"); }} title="Sair" className="rounded p-2 hover:bg-slate-100"><LogOut size={17} /></button>

@@ -111,34 +111,26 @@ function RuleWizard() {
   const originFields = activeFields(originSource);
   const destinationFields = activeFields(destinationSource);
 
-  useEffect(() => {
-    setForm(current => {
-      if (filteredOriginSources.some(item => item.id === current.originDataSourceId)) return current;
-      const nextOriginDataSourceId = filteredOriginSources.length === 1 ? filteredOriginSources[0].id : "";
-      if (current.originDataSourceId === nextOriginDataSourceId) return current;
-      return { ...current, originDataSourceId: nextOriginDataSourceId };
-    });
-  }, [filteredOriginSources]);
-
-  useEffect(() => {
-    setForm(current => {
-      if (filteredDestinationSources.some(item => item.id === current.destinationDataSourceId)) return current;
-      const nextDestinationDataSourceId = filteredDestinationSources.length === 1 ? filteredDestinationSources[0].id : "";
-      if (current.destinationDataSourceId === nextDestinationDataSourceId) return current;
-      return { ...current, destinationDataSourceId: nextDestinationDataSourceId };
-    });
-  }, [filteredDestinationSources]);
-
-  useEffect(() => {
+  const resetRelationships = () => {
     setJoins([{ originFieldId: "", destinationFieldId: "", normalizationType: "NONE" }]);
     setSuggestions([]);
     setPromptSuggestions([]);
     setGeneratedQuery("");
     setRelationshipMessage("");
-  }, [form.originDataSourceId, form.destinationDataSourceId]);
+  };
 
   const updateForm = <K extends keyof RuleFormState>(key: K) => (value: RuleFormState[K]) => {
     setForm(current => ({ ...current, [key]: value }));
+  };
+
+  const updateOriginDataSource = (originDataSourceId: string) => {
+    setForm(current => ({ ...current, originDataSourceId }));
+    resetRelationships();
+  };
+
+  const updateDestinationDataSource = (destinationDataSourceId: string) => {
+    setForm(current => ({ ...current, destinationDataSourceId }));
+    resetRelationships();
   };
 
   const updateOriginBrowser = (patch: Partial<SourceBrowserState>) => {
@@ -333,8 +325,8 @@ function RuleWizard() {
             filteredDestinationSources={filteredDestinationSources}
             onOriginBrowserChange={updateOriginBrowser}
             onDestinationBrowserChange={updateDestinationBrowser}
-            onOriginDataSourceChange={updateForm("originDataSourceId")}
-            onDestinationDataSourceChange={updateForm("destinationDataSourceId")}
+            onOriginDataSourceChange={updateOriginDataSource}
+            onDestinationDataSourceChange={updateDestinationDataSource}
             onLoadOriginTables={() => void loadTables("origin")}
             onLoadDestinationTables={() => void loadTables("destination")}
           />
