@@ -1,64 +1,48 @@
 "use client";
 
-import { Fragment, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import * as XLSX from "xlsx";
-import { ChevronDown, ChevronUp } from "lucide-react";
-import { Button, Card, ErrorState, PageHeader, StatusBadge } from "@/components/shared/ui";
-import { connectorDataService, extractionTypes, type ExtractionRecord, type ExtractionType } from "@/services/connector-data.service";
+import { useState } from "react";
+import { Eye } from "lucide-react";
+import { Card, ErrorState, PageHeader } from "@/components/shared/ui";
+import { connectorTransmissionsService, type TransmissionPage, type TransmissionSummary, type ValidatedProduct } from "@/services/connector-transmissions.service";
 
-const label = (type: string) => extractionTypes.find(([id]) => id === type)?.[1] ?? type;
-const value = (payload: Record<string, unknown>, key: string) => payload[key] ?? payload[key.toUpperCase()] ?? payload[key.toLowerCase()];
-const date = (raw: unknown) => raw ? new Date(String(raw)).toLocaleDateString("pt-BR") : "—";
-const amount = (raw: unknown) => typeof raw === "number" || typeof raw === "string" && !Number.isNaN(Number(raw)) ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(raw)) : "—";
-const escapeCsv = (value: unknown) => `"${String(value ?? "").replaceAll('"', '""')}"`;
-const cellValue = (value: unknown) => value == null ? "" : typeof value === "object" ? JSON.stringify(value) : String(value);
-const detailValue = (raw: unknown) => raw == null || raw === "" ? "—" : typeof raw === "object" ? <pre className="max-w-xl overflow-auto whitespace-pre-wrap break-words text-xs text-slate-700">{JSON.stringify(raw, null, 2)}</pre> : String(raw);
-const download = (name: string, content: BlobPart, type: string) => { const url = URL.createObjectURL(new Blob([content], { type })); const anchor = document.createElement("a"); anchor.href = url; anchor.download = name; anchor.click(); URL.revokeObjectURL(url); };
-
-function exportRows(records: ExtractionRecord[], entityType: ExtractionType, format: "csv" | "xlsx") {
-  const payloadKeys = [...new Set(records.flatMap(record => Object.keys(record.payload)))];
-  const headers = ["Chave de origem", "Alteração no ERP", "Recebido em", ...payloadKeys];
-  const rows = records.map(record => [record.sourceKey, record.sourceChangedAt ?? "", record.receivedAt, ...payloadKeys.map(key => cellValue(record.payload[key]))]);
-  const suffix = entityType.toLowerCase();
-  if (format === "csv") {
-    download(`${suffix}.csv`, `\uFEFF${[headers, ...rows].map(row => row.map(escapeCsv).join(";")).join("\r\n")}`, "text/csv;charset=utf-8");
-    return;
-  }
-  const workbook = XLSX.utils.book_new();
-  const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Dados importados");
-  download(`${suffix}.xlsx`, XLSX.write(workbook, { bookType: "xlsx", type: "array", compression: true }), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-}
+const issueLabels: Record<string, string> = { all: "Todos os itens", ok: "Itens sem pendência", ncm: "Itens com NCM pendente", cest: "Itens com CEST pendente", cst: "Itens com CST ICMS pendente", cfop: "Itens com CFOP pendente" };
 
 export default function ConnectorDataPage() {
-  const [entityType, setEntityType] = useState<ExtractionType>("FINANCEIRO_TITULOS_V1");
-  const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null);
-  const [exporting, setExporting] = useState<"csv" | "xlsx" | null>(null);
-  const summary = useQuery({ queryKey: ["connector-data-summary"], queryFn: connectorDataService.summary });
-  const records = useQuery({ queryKey: ["connector-data", entityType], queryFn: () => connectorDataService.list(entityType) });
-  const financial = entityType === "FINANCEIRO_TITULOS_V1";
-  const payloadColumns = [...new Set(records.data?.items.flatMap(item => Object.keys(item.payload)) ?? [])].slice(0, 4);
-  const exportData = async (format: "csv" | "xlsx") => {
-    setExporting(format);
-    try { exportRows(await connectorDataService.listAll(entityType), entityType, format); }
-    finally { setExporting(null); }
-  };
+  const [fileFilter, setFileFilter] = useState("");
+  const [transmissionPage, setTransmissionPage] = useState(1);
+  const [issue, setIssue] = useState("");
+  const transmissions = useQuery({ queryKey: ["connector-transmissions", transmissionPage, fileFilter], queryFn: () => connectorTransmissionsService.list({ page: transmissionPage, file: fileFilter }) });
+  const summary = useQuery({ queryKey: ["connector-transmission-summary"], queryFn: connectorTransmissionsService.summary });
+  const validationProducts = useQuery({ queryKey: ["connector-validation-products", issue], queryFn: () => connectorTransmissionsService.products(issue), enabled: Boolean(issue) });
+  const proposals = useQuery({ queryKey: ["sped-fiscal-proposals"], queryFn: connectorTransmissionsService.spedProposals });
 
   return <>
-    <PageHeader title="Dados extraídos do ERP" description="Dados recebidos pelo Connector, segregados por empresa e consulta." />
-    {summary.isError ? <ErrorState message="Não foi possível carregar o resumo das extrações." /> : <div className="mb-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">{summary.data?.map(item => <Card key={item.entityType} className="p-4"><p className="text-xs text-slate-500">{label(item.entityType)}</p><p className="mt-1 text-2xl font-semibold text-slate-800">{item.total.toLocaleString("pt-BR")}</p><p className="mt-2 text-xs text-slate-500">{item.lastReceivedAt ? `Recebido: ${new Date(item.lastReceivedAt).toLocaleString("pt-BR")}` : "Sem carga"}</p></Card>)}</div>}
-    <Card className="overflow-x-auto p-4">
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <select className="rounded border p-2 text-sm" value={entityType} onChange={event => { setEntityType(event.target.value as ExtractionType); setExpandedRecordId(null); }}>
-          {extractionTypes.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-        </select>
-        <StatusBadge value={records.isFetching ? "RUNNING" : "COMPLETED"} />
-        <span className="text-sm text-slate-500">{records.data?.total ?? 0} registros</span>
-        <div className="ml-auto flex gap-2"><Button variant="secondary" disabled={!records.data?.total || !!exporting} onClick={() => exportData("csv")}>{exporting === "csv" ? "Exportando..." : "Exportar CSV"}</Button><Button variant="secondary" disabled={!records.data?.total || !!exporting} onClick={() => exportData("xlsx")}>{exporting === "xlsx" ? "Exportando..." : "Exportar XLSX"}</Button></div>
-      </div>
-      {records.isError ? <ErrorState message="Não foi possível carregar os dados recebidos." /> : <table className="w-full min-w-max text-left text-sm"><thead><tr className="border-b bg-slate-50 text-xs uppercase text-slate-500">{financial ? <><th className="p-3">Empresa</th><th className="p-3">Título</th><th className="p-3">Emissão</th><th className="p-3">Vencimento</th><th className="p-3 text-right">Valor original</th><th className="p-3 text-right">Em aberto</th></> : <>{payloadColumns.map(key => <th className="p-3" key={key}>{key.replaceAll("_", " ")}</th>)}<th className="p-3">Chave de origem</th></>}<th className="p-3">Recebido em</th><th className="p-3"><span className="sr-only">Detalhar registro</span></th></tr></thead><tbody>{records.data?.items.map(item => { const expanded = expandedRecordId === item.id; return <Fragment key={item.id}><tr className="border-b">{financial ? <><td className="p-3">{String(value(item.payload, "nroempresa") ?? "—")}</td><td className="p-3 font-mono text-xs">{String(value(item.payload, "nrotitulo") ?? "—")}</td><td className="p-3">{date(value(item.payload, "dtaemissao"))}</td><td className="p-3">{date(value(item.payload, "dtavencimento"))}</td><td className="p-3 text-right">{amount(value(item.payload, "vlroriginal"))}</td><td className="p-3 text-right">{amount(value(item.payload, "vlraberto"))}</td></> : <>{payloadColumns.map(key => <td className="max-w-52 truncate p-3" key={key} title={cellValue(item.payload[key])}>{cellValue(item.payload[key]) || "—"}</td>)}<td className="max-w-52 truncate p-3 font-mono text-xs" title={item.sourceKey}>{item.sourceKey}</td></>}<td className="p-3 whitespace-nowrap">{new Date(item.receivedAt).toLocaleString("pt-BR")}</td><td className="p-3"><Button variant="ghost" className="px-2" aria-expanded={expanded} aria-controls={`record-${item.id}`} onClick={() => setExpandedRecordId(expanded ? null : item.id)}>{expanded ? <><ChevronUp size={16} />Ocultar</> : <><ChevronDown size={16} />Detalhar</>}</Button></td></tr>{expanded && <tr id={`record-${item.id}`} className="border-b bg-slate-50"><td className="p-4" colSpan={financial ? 8 : payloadColumns.length + 3}><p className="mb-3 text-sm font-semibold text-slate-800">Dados completos do registro</p><div className="overflow-x-auto rounded-lg border border-slate-200 bg-white"><table className="w-full text-sm"><thead><tr className="border-b bg-slate-50 text-xs uppercase text-slate-500"><th className="p-3 text-left">Campo</th><th className="p-3 text-left">Valor</th></tr></thead><tbody><tr className="border-b border-slate-100"><td className="p-3 font-medium text-slate-600">Chave de origem</td><td className="p-3 font-mono text-xs">{item.sourceKey}</td></tr><tr className="border-b border-slate-100"><td className="p-3 font-medium text-slate-600">Alteração no ERP</td><td className="p-3">{item.sourceChangedAt ? new Date(item.sourceChangedAt).toLocaleString("pt-BR") : "—"}</td></tr>{Object.entries(item.payload).map(([key, raw]) => <tr className="border-b border-slate-100 last:border-0" key={key}><td className="p-3 align-top font-medium text-slate-600">{key}</td><td className="p-3 align-top">{detailValue(raw)}</td></tr>)}</tbody></table></div></td></tr>}</Fragment> })}</tbody></table>}
-      {!records.isLoading && !records.data?.items.length && <p className="py-10 text-center text-sm text-slate-500">Nenhum lote desta consulta foi recebido ainda.</p>}
-    </Card>
+    <PageHeader title="Cadastro fiscal importado" description="Selecione um status para consultar os produtos recebidos e suas pendências de cadastro." />
+    {summary.isError ? <ErrorState message="Não foi possível carregar o resumo dos produtos importados." /> : <TransmissionSummaryCards summary={summary.data} loading={summary.isLoading} selectedIssue={issue} select={setIssue} />}
+    {proposals.data?.items.length ? <SpedProposals items={proposals.data.items} total={proposals.data.total} /> : null}
+    <ValidationProducts issue={issue} loading={validationProducts.isLoading} error={validationProducts.isError} items={validationProducts.data} />
+    {transmissions.isError ? <ErrorState message="Não foi possível carregar os lotes enviados pelo Connector." /> : <TransmissionList data={transmissions.data} loading={transmissions.isLoading} file={fileFilter} setFile={(value) => { setFileFilter(value); setTransmissionPage(1); }} setPage={setTransmissionPage} />}
   </>;
+}
+
+function SpedProposals({ items, total }: { items: Awaited<ReturnType<typeof connectorTransmissionsService.spedProposals>>["items"]; total: number }) { return <Card className="mb-5 overflow-hidden"><div className="border-b p-4"><b className="text-slate-800">Propostas fiscais geradas do SPED</b><span className="ml-2 text-sm text-slate-500">{total} pendente(s) de revisão</span></div><div className="overflow-x-auto"><table className="w-full min-w-[800px] text-sm"><thead><tr className="bg-slate-50 text-xs uppercase text-slate-500"><th className="p-3 text-left">Produto / família sugerida</th><th className="p-3 text-left">NCM / CEST</th><th className="p-3 text-left">CST / CFOP observados</th><th className="p-3 text-left">Alíquota efetiva</th><th className="p-3 text-left">Regras</th></tr></thead><tbody>{items.map(item => <tr key={item.id} className="border-t border-slate-100"><td className="p-3"><b className="block">{item.canonicalDescription}</b><small className="text-slate-500">{item.productCode} · {item.familyName || item.familyKey || "Família a definir"}</small></td><td className="p-3">{item.ncm || "—"} / {item.cest || "—"}</td><td className="p-3">{item.taxation.cstIcms || "—"} / {item.taxation.cfop || "—"}</td><td className="p-3">ICMS {item.evidence.effectiveIcmsRate ?? "—"}% · IPI {item.evidence.effectiveIpiRate ?? "—"}%</td><td className="p-3">{item.validation.error ? "Validação indisponível" : `${item.validation.matchedRules?.length ?? 0} regra(s) encontrada(s)`}</td></tr>)}</tbody></table></div></Card>; }
+
+function TransmissionSummaryCards({ summary, loading, selectedIssue, select }: { summary?: TransmissionSummary; loading: boolean; selectedIssue: string; select: (issue: string) => void }) {
+  const cards = [["Total de itens", summary?.totalItems ?? summary?.products ?? 0, "all"], ["Sem pendência", summary?.withoutPending ?? 0, "ok"], ["NCM pendente", summary?.missingNcm ?? 0, "ncm"], ["CEST pendente", summary?.missingCest ?? 0, "cest"], ["CST ICMS pendente", summary?.missingCstIcms ?? 0, "cst"], ["CFOP pendente", summary?.missingCfop ?? 0, "cfop"]];
+  return <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6" aria-label="Resumo de produtos importados">{cards.map(([label, total, issue]) => <button key={String(issue)} type="button" onClick={() => select(String(issue))} aria-pressed={selectedIssue === issue} className="rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-blue-500"><Card className={`h-full p-4 transition hover:border-blue-300 hover:shadow-sm ${selectedIssue === issue ? "border-blue-500 bg-blue-50" : ""}`}><p className="text-xs font-semibold uppercase text-slate-500">{label}</p><p className="mt-2 text-2xl font-bold text-slate-900">{loading ? "—" : total}</p><p className="mt-2 text-xs text-blue-700">Ver produtos</p></Card></button>)}</section>;
+}
+
+function ValidationProducts({ issue, loading, error, items }: { issue: string; loading: boolean; error: boolean; items?: ValidatedProduct[] }) {
+  if (!issue) return null;
+  if (error) return <ErrorState message="Não foi possível carregar os produtos deste status." />;
+  return <Card className="mb-5 overflow-x-auto"><div className="border-b p-4"><b className="text-slate-800">{issueLabels[issue] ?? "Produtos importados"}</b><span className="ml-2 text-sm text-slate-500">{loading ? "Carregando..." : `${items?.length ?? 0} item(ns)`}</span></div>{loading ? <p className="p-5 text-sm text-slate-500">Carregando produtos...</p> : <><table className="w-full min-w-[720px] text-sm"><thead><tr className="border-b bg-slate-50 text-xs uppercase text-slate-500"><th className="p-3 text-left">Produto</th><th className="p-3 text-left">NCM / CEST</th><th className="p-3 text-left">CST / CFOP</th><th className="p-3 text-left">Arquivos SPED de origem</th><th className="p-3 text-right"><span className="sr-only">Ações</span></th></tr></thead><tbody>{items?.map(item => <tr key={item.code} className="border-t border-slate-100"><td className="p-3"><b className="block text-slate-800">{item.description}</b><small className="font-mono text-slate-500">{item.code}</small></td><td className="p-3">{item.ncm || "—"} / {item.cest || "—"}</td><td className="p-3">{item.cstIcms || "—"} / {item.cfop || "—"}</td><td className="p-3">{item.files.join(", ") || "—"}</td><td className="p-3 text-right"><Link href={`/connector-data/products/${encodeURIComponent(item.code)}`} className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-800 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"><Eye size={14} />Detalhes</Link></td></tr>)}</tbody></table>{!items?.length && <p className="p-8 text-center text-sm text-slate-500">Nenhum produto encontrado para este status.</p>}</>}</Card>;
+}
+
+function TransmissionList({ data, loading, file, setFile, setPage }: { data?: TransmissionPage; loading: boolean; file: string; setFile: (value: string) => void; setPage: (page: number) => void }) {
+  const items = data?.items ?? [];
+  const page = data?.page ?? 1;
+  const pages = Math.max(1, data?.totalPages ?? 1);
+  return <Card className="mb-5 overflow-hidden"><div className="flex flex-wrap items-center gap-3 border-b bg-slate-50 px-5 py-4"><b className="text-sm text-slate-800">Lotes recebidos do Connector</b><input className="rounded border border-slate-300 px-2 py-1 text-sm" value={file} onChange={event => setFile(event.target.value)} placeholder="Filtrar por arquivo SPED importado" /></div>{loading ? <p className="p-5 text-sm text-slate-500">Carregando lotes...</p> : !items.length ? <p className="p-5 text-sm text-slate-500">Nenhum arquivo encontrado.</p> : <><div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead><tr className="border-b text-xs uppercase text-slate-500"><th className="p-3">Arquivo / status</th><th className="p-3">Registros</th><th className="p-3">Produto</th><th className="p-3">NCM</th><th className="p-3">CST / CFOP</th></tr></thead><tbody>{items.map(item => <tr className="border-b border-slate-100" key={item.id}><td className="p-3"><b>{item.sourceName || "Carga local"}</b><small className="block">{item.status}{item.sourceSize != null ? ` · ${new Intl.NumberFormat("pt-BR", { style: "unit", unit: "byte", unitDisplay: "narrow" }).format(item.sourceSize)}` : ""}</small></td><td className="p-3">{item.processedRows}/{item.totalRows}</td><td className="p-3">{item.records[0] ? <Link className="text-blue-700 hover:underline" href={`/connector-data/products/${item.records[0].id}?source=connector`}>{item.records[0].canonicalDescription}</Link> : "—"}</td><td className="p-3">{item.records[0]?.ncm || "—"}</td><td className="p-3">{String(item.records[0]?.rawData?.cstIcms ?? "—")} / {String(item.records[0]?.rawData?.cfop ?? "—")}</td></tr>)}</tbody></table></div><div className="flex items-center justify-between p-3 text-sm"><span>{data?.total ?? 0} arquivo(s) · página {page}/{pages}</span><div className="flex gap-2"><button className="rounded border px-2 py-1 disabled:opacity-50" disabled={page === 1} onClick={() => setPage(page - 1)}>Anterior</button><button className="rounded border px-2 py-1 disabled:opacity-50" disabled={page === pages} onClick={() => setPage(page + 1)}>Próxima</button></div></div></>}</Card>;
 }

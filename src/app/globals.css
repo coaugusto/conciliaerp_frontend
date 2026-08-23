@@ -5,3 +5,15 @@
 body { margin: 0; background: var(--background); color: var(--foreground); font-family: Arial, Helvetica, sans-serif; }
 button, input, select, textarea { font: inherit; }
 ::selection { background: #c7d9ff; }
+
+html.dark { --background: #0f172a; --foreground: #e5e7eb; color-scheme: dark; }
+html.dark body, html.dark .bg-white { background-color: #111827 !important; }
+html.dark .bg-slate-50, html.dark .bg-\[\#f7f8fc\] { background-color: #1e293b !important; }
+html.dark .bg-slate-50\/70, html.dark .bg-white\/70, html.dark .bg-cyan-50\/50 { background-color: #182234 !important; }
+html.dark .bg-slate-100 { background-color: #334155 !important; }
+html.dark .bg-blue-50 { background-color: #172554 !important; }
+html.dark .text-slate-900, html.dark .text-slate-800, html.dark .text-slate-700 { color: #f3f4f6 !important; }
+html.dark .text-slate-600, html.dark .text-slate-500, html.dark .text-slate-400 { color: #b8c4d4 !important; }
+html.dark .border-slate-200, html.dark .border-slate-300 { border-color: #3f5068 !important; }
+html.dark input, html.dark textarea, html.dark select { background-color: #172033; color: #f3f4f6; }
+html.dark input:disabled, html.dark select:disabled, html.dark textarea:disabled { color: #94a3b8; }
