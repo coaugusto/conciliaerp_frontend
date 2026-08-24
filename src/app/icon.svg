@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Concilia ERP">
+  <defs>
+    <linearGradient id="brand" x1="10" y1="8" x2="54" y2="58" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#405b9e"/>
+      <stop offset="1" stop-color="#075d70"/>
+    </linearGradient>
+  </defs>
+  <circle cx="32" cy="32" r="30" fill="url(#brand)"/>
+  <path fill="#fff" d="M43.8 39.5a15.5 15.5 0 1 1 0-15l-7 3.2a7.8 7.8 0 1 0 0 8.6l7 3.2Z"/>
+  <circle cx="47" cy="17" r="5" fill="#39a4c2" stroke="#fff" stroke-width="2"/>
+</svg>
