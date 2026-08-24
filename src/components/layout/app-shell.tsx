@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, BookOpen, ChevronDown, ChevronLeft, Database, Gauge, Handshake, Landmark, ListChecks, LogOut, Menu, Moon, PlayCircle, Search, ShieldCheck, Store, Sun, Workflow, CreditCard, Code2, ClipboardCheck } from "lucide-react";
+import { Bell, BookOpen, ChevronDown, ChevronLeft, Database, Gauge, ListChecks, LogOut, Menu, Moon, Search, ShieldCheck, Store, Sun, Workflow, CreditCard, Code2, ClipboardCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/providers";
 import { cn } from "@/utils/cn";
 import { api, type ApiResponse } from "@/services/api/client";
+import { clientContextService } from "@/services/client-context.service";
 
 type ClientTenant = { id: string; name: string; cncCode: string };
 
@@ -15,18 +16,14 @@ const navigation = [
   { href: "/dashboard", label: "Painel de conciliações", icon: Gauge },
   { href: "/commercial", label: "Portal do Cliente", icon: CreditCard },
   { href: "/marketplace", label: "Catálogo mestre", icon: Store },
-  { href: "/supplier-portal", label: "Cadastro de fornecedores", icon: Handshake },
-  { href: "/tax-impact-simulator", label: "Simulador de impacto tributário", icon: Landmark },
   { href: "/consinco", label: "Integração Consinco", icon: Workflow, admin: true },
   { href: "/alerts", label: "Alertas", icon: Bell },
-  { href: "/executions", label: "Execuções", icon: PlayCircle },
   { href: "/rules", label: "Regras", icon: ListChecks, admin: true },
-  { href: "/data-sources", label: "Fontes de dados", icon: Database, admin: true },
   { href: "/connections", label: "Conexões ERP", icon: ShieldCheck, admin: true },
   { href: "/connector-queries", label: "Consultas do agente conector", icon: Code2, admin: true },
-  { href: "/documentation/connector-queries", label: "Documentação do agente conector", icon: BookOpen, admin: true },
   { href: "/connector-data", label: "Cadastros importados", icon: Database },
   { href: "/catalog-review", label: "Revisão de cadastros", icon: ClipboardCheck, admin: true },
+  { href: "/documentation/connector-queries", label: "Documentação do agente conector", icon: BookOpen, admin: true },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -35,6 +32,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, logout, theme, toggleTheme } = useAuth();
   const tenants = useQuery({ queryKey: ["client-tenants"], queryFn: async () => (await api.get<ApiResponse<ClientTenant[]>>("/auth/tenants")).data.data, enabled: !!user });
   const [tenantId, setTenantId] = useState(() => typeof window === "undefined" ? "" : localStorage.getItem("concilia_tenant_id") ?? "");
+  const [companyId, setCompanyId] = useState(() => typeof window === "undefined" ? "" : localStorage.getItem("concilia_company_id") ?? "");
+  const clients = useQuery({ queryKey: ["client-context", tenantId], queryFn: clientContextService.list, enabled: !!user && !!tenantId });
   const [menuExpanded, setMenuExpanded] = useState(false);
   const activeItem = navigation.find((item) => path === item.href || path.startsWith(`${item.href}/`));
 
@@ -43,6 +42,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     else if (user.mustChangePassword) router.replace("/change-password");
     else if (user.role === "ANALYST" && ["/rules", "/data-sources", "/connections", "/connector-queries", "/documentation"].some((item) => path.startsWith(item))) router.replace("/dashboard");
   }, [user, path, router]);
+  useEffect(() => {
+    if (!clients.data?.length) return;
+    const selected = clients.data.find(client => client.companyIds.includes(companyId)) ?? clients.data[0];
+    const selectedCompanyId = selected?.companyIds[0];
+    if (!selectedCompanyId || selectedCompanyId === companyId) return;
+    localStorage.setItem("concilia_company_id", selectedCompanyId);
+    window.dispatchEvent(new Event("concilia:company-changed"));
+    const update = window.setTimeout(() => setCompanyId(selectedCompanyId), 0);
+    return () => window.clearTimeout(update);
+  }, [clients.data, companyId]);
   if (!user) return null;
 
   const visibleNavigation = navigation.filter((item) => !item.admin || user.role === "ADMIN");
@@ -56,7 +65,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="text-lg font-bold tracking-tight">CONCILIA <small className="font-medium text-slate-500">ERP</small></span>
           </Link>
           <div className="hidden h-8 w-px bg-slate-200 lg:block" />
-          <label className="hidden w-[30rem] items-center gap-2 rounded border border-slate-300 bg-slate-50 px-2 py-1.5 text-xs text-slate-600 lg:flex"><span className="whitespace-nowrap font-semibold">Cliente:</span><select value={tenantId} onChange={event => selectTenant(event.target.value)} className="min-w-0 flex-1 bg-transparent font-medium outline-none"><option value="" disabled>Selecione</option>{(tenants.data ?? []).map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.cncCode} · {tenant.name}</option>)}</select></label>
+          <label className="hidden w-56 items-center gap-2 rounded border border-slate-300 bg-slate-50 px-2 py-1.5 text-xs text-slate-600 lg:flex"><span className="whitespace-nowrap font-semibold">Ambiente:</span><select value={tenantId} onChange={event => selectTenant(event.target.value)} className="min-w-0 flex-1 bg-transparent font-medium outline-none"><option value="" disabled>Selecione</option>{(tenants.data ?? []).map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.cncCode} · {tenant.name}</option>)}</select></label>
+          <label className="hidden w-72 items-center gap-2 rounded border border-slate-300 bg-slate-50 px-2 py-1.5 text-xs text-slate-600 lg:flex"><span className="whitespace-nowrap font-semibold">Cliente:</span><select value={companyId} disabled={clients.isLoading || clients.isError} onChange={event => { localStorage.setItem("concilia_company_id", event.target.value); setCompanyId(event.target.value); window.dispatchEvent(new Event("concilia:company-changed")); }} className="min-w-0 flex-1 bg-transparent font-medium outline-none"><option value="" disabled>{clients.isLoading ? "Carregando..." : clients.isError ? "Falha ao carregar" : "Selecione"}</option>{(clients.data ?? []).filter(client => client.companyIds.length > 0).map(client => <option key={client.id} value={client.companyIds[0]}>{client.tradeName || client.legalName} · {client.matrixCnpj}</option>)}</select></label>
           <label className="hidden h-9 w-72 items-center gap-2 rounded border border-slate-300 bg-slate-50 px-3 text-slate-400 md:flex">
             <Search size={16} />
             <input className="min-w-0 flex-1 bg-transparent text-sm text-slate-700 outline-none placeholder:text-slate-400" placeholder="Pesquisar aplicação" aria-label="Pesquisar aplicação" />
