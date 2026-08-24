@@ -43,6 +43,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     else if (user.role === "ANALYST" && ["/rules", "/data-sources", "/connections", "/connector-queries", "/documentation"].some((item) => path.startsWith(item))) router.replace("/dashboard");
   }, [user, path, router]);
   useEffect(() => {
+    const syncClientSelection = () => {
+      setTenantId(localStorage.getItem("concilia_tenant_id") ?? "");
+      setCompanyId(localStorage.getItem("concilia_company_id") ?? "");
+    };
+
+    window.addEventListener("concilia:tenant-changed", syncClientSelection);
+    window.addEventListener("storage", syncClientSelection);
+    return () => {
+      window.removeEventListener("concilia:tenant-changed", syncClientSelection);
+      window.removeEventListener("storage", syncClientSelection);
+    };
+  }, []);
+  useEffect(() => {
     if (!clients.data?.length) return;
     const selected = clients.data.find(client => client.companyIds.includes(companyId)) ?? clients.data[0];
     const selectedCompanyId = selected?.companyIds[0];

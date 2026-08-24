@@ -1,27 +1,3 @@
-export type ValidationRule = {
-  id: string;
-  name: string;
-  category: "CADASTRAL" | "FISCAL" | "RELATIONSHIP" | "DOCUMENT";
-  description: string;
-  validation: string;
-  alertCondition: string;
-  expectedResult: string;
-  appliesTo: string[];
-  severity: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
-  active: boolean;
-};
-
-const rules: ValidationRule[] = [
-  { id: "required-product-fields", name: "Campos obrigatórios do produto", category: "CADASTRAL", description: "Confere se o produto possui os dados mínimos necessários para identificação e conciliação.", validation: "Código, descrição, unidade, GTIN/EAN e situação do cadastro.", alertCondition: "Um ou mais campos obrigatórios estão vazios ou inválidos.", expectedResult: "Produto completo e apto para as demais validações.", appliesTo: ["Produtos"], severity: "HIGH", active: true },
-  { id: "duplicate-products", name: "Produtos duplicados", category: "CADASTRAL", description: "Identifica produtos possivelmente cadastrados mais de uma vez no ERP.", validation: "GTIN, descrições normalizadas, marca, fabricante e unidade.", alertCondition: "Dois ou mais registros apresentam a mesma identidade comercial.", expectedResult: "Manter um cadastro principal e relacionar ou inativar as duplicidades.", appliesTo: ["Produtos"], severity: "MEDIUM", active: true },
-  { id: "ncm-validation", name: "Validação de NCM", category: "FISCAL", description: "Compara a classificação fiscal do cliente com as evidências disponíveis.", validation: "NCM atual, descrição, família, SPED, Catálogo Central e vigência da classificação.", alertCondition: "NCM ausente, inválido, extinto ou divergente da sugestão.", expectedResult: "NCM válido e compatível com a natureza do produto.", appliesTo: ["Produtos", "Tributações"], severity: "CRITICAL", active: true },
-  { id: "cest-validation", name: "Validação de CEST", category: "FISCAL", description: "Verifica a aplicação do CEST conforme NCM e regras de substituição tributária.", validation: "NCM, CEST, segmento, UF e regras fiscais vigentes.", alertCondition: "CEST obrigatório ausente ou código incompatível com o NCM.", expectedResult: "CEST correto para o produto e operação aplicável.", appliesTo: ["Produtos", "Tributações"], severity: "HIGH", active: true },
-  { id: "icms-rate", name: "Alíquota de ICMS por UF", category: "FISCAL", description: "Compara a alíquota cadastrada com a regra aplicável à operação e ao estado.", validation: "Origem, destino, regime, NCM, CST/CSOSN, pauta e alíquota efetiva observada.", alertCondition: "Alíquota cadastrada diverge da regra ou da evidência fiscal.", expectedResult: "Tributação alinhada à operação e à UF do estabelecimento.", appliesTo: ["Tributações", "Pautas"], severity: "HIGH", active: true },
-  { id: "cst-cfop", name: "Compatibilidade CST e CFOP", category: "FISCAL", description: "Valida se CST/CSOSN e CFOP formam uma combinação coerente para a operação.", validation: "CST/CSOSN, CFOP, tipo de movimento, regime e UF.", alertCondition: "Combinação incompatível, incompleta ou diferente do padrão observado no SPED.", expectedResult: "Códigos fiscais coerentes com entrada, saída e regime tributário.", appliesTo: ["Tributações", "SPED"], severity: "HIGH", active: true },
-  { id: "family-link", name: "Vínculo de produto e família", category: "RELATIONSHIP", description: "Confirma se cada produto pertence a uma família válida e coerente.", validation: "Família, divisão, categoria, descrição e produtos similares.", alertCondition: "Produto sem família, ligado a família inativa ou com classificação divergente.", expectedResult: "Produto relacionado à estrutura mercadológica correta.", appliesTo: ["Produtos", "Famílias"], severity: "MEDIUM", active: true },
-  { id: "supplier-product", name: "Vínculo de fornecedor e produto", category: "RELATIONSHIP", description: "Verifica a consistência dos fornecedores relacionados a cada produto.", validation: "CNPJ, inscrição estadual, produto do fornecedor, GTIN e histórico de compras.", alertCondition: "Fornecedor inválido, sem dados obrigatórios ou vínculo sem evidência de operação.", expectedResult: "Fornecedor válido e corretamente vinculado aos produtos fornecidos.", appliesTo: ["Fornecedores", "Produtos"], severity: "MEDIUM", active: true },
-  { id: "sped-evidence", name: "Conciliação com SPED", category: "DOCUMENT", description: "Usa os arquivos SPED recebidos para confirmar cadastros e regras efetivamente praticadas.", validation: "Produtos, NCM, CST, CFOP, bases, alíquotas e documentos informados no SPED.", alertCondition: "Cadastro do ERP difere de forma relevante dos dados fiscais observados.", expectedResult: "Cadastro conciliado com as operações fiscais transmitidas.", appliesTo: ["SPED", "Produtos", "Tributações"], severity: "CRITICAL", active: true },
-  { id: "implementation-xml", name: "XML simulado de implantação", category: "DOCUMENT", description: "Valida se o ambiente do cliente consegue importar uma nota simulada com seus cadastros.", validation: "Fornecedor, produtos, GTIN, NCM, tributação, totais e estrutura do XML.", alertCondition: "XML rejeitado ou importado com divergência cadastral ou fiscal.", expectedResult: "Nota de teste importada sem rejeições e com cadastros reconhecidos.", appliesTo: ["XML", "Fornecedores", "Produtos", "Tributações"], severity: "HIGH", active: false },
-];
-
-export const validationRulesService = { list: async () => { await new Promise((resolve) => setTimeout(resolve, 250)); return rules; } };
+import { api, type ApiResponse } from "./api/client";
+export type ValidationRule={id:string;name:string;category:"CADASTRAL"|"FISCAL"|"RELATIONSHIP"|"DOCUMENT";description:string;validation:string;alertCondition:string;expectedResult:string;appliesTo:string[];severity:"CRITICAL"|"HIGH"|"MEDIUM"|"LOW";active:boolean};
+export const validationRulesService={list:async()=>(await api.get<ApiResponse<ValidationRule[]>>("/reconciliation-rules")).data.data};
