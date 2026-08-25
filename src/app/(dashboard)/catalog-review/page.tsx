@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Check, CheckCircle2, ChevronLeft, ChevronRight, Edit3, Globe2, ImageIcon, LoaderCircle, PackageCheck, Save, Sparkles, X } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader, StatusBadge } from "@/components/shared/ui";
@@ -18,7 +18,10 @@ const changesFrom = (draft: Draft, original?: CatalogReviewItem): CatalogReviewC
 
 export default function CatalogReviewPage() {
   const [page, setPage] = useState(1); const [selected, setSelected] = useState<string[]>([]); const [editing, setEditing] = useState<CatalogReviewItem | null>(null); const [draft, setDraft] = useState<Draft>(emptyDraft); const [batchField, setBatchField] = useState<CatalogReviewField>("ncm"); const [batchValue, setBatchValue] = useState(""); const [researchResult, setResearchResult] = useState<CatalogWebResearchResult | null>(null); const [aiResult, setAiResult] = useState<CatalogAiEnrichmentResult | null>(null); const [researchField, setResearchField] = useState<string | null>(null); const queryClient = useQueryClient();
+  const [maintenanceTarget] = useState(() => { if (typeof window === "undefined") return null; const params = new URLSearchParams(window.location.search); const productId = params.get("productId"); const code = params.get("code"); return productId || code ? { productId, code } : null; });
+  const [targetHandled, setTargetHandled] = useState(false);
   const queue = useQuery({ queryKey: ["catalog-review", page], queryFn: () => catalogReviewService.list(page) });
+  const targetProduct = useQuery({ queryKey: ["catalog-review", "target", maintenanceTarget?.productId], queryFn: () => catalogReviewService.get(maintenanceTarget!.productId!), enabled: !!maintenanceTarget?.productId, retry: false });
   const refresh = async () => { setSelected([]); await queryClient.invalidateQueries({ queryKey: ["catalog-review"] }); };
   const save = useMutation({ mutationFn: ({ id, changes }: { id: string; changes: CatalogReviewChanges }) => catalogReviewService.update(id, changes), onSuccess: () => { setEditing(null); refresh(); } });
   const bulk = useMutation({ mutationFn: () => catalogReviewService.updateMany(selected, { [batchField]: fields.find(({ key }) => key === batchField)?.type && batchValue !== "" ? Number(batchValue) : batchValue }), onSuccess: () => { setBatchValue(""); refresh(); } });
@@ -27,12 +30,21 @@ export default function CatalogReviewPage() {
   const aiEligibleIds = useMemo(() => researchResult?.results.filter((item) => item.status === "EVIDENCE_ONLY" || item.status === "NO_MATCH").map((item) => item.productId) ?? [], [researchResult]);
   const ai = useMutation({ mutationFn: () => catalogReviewService.aiEnrich(aiEligibleIds), onSuccess: async (result) => { setAiResult(result); await refresh(); } });
   const items = useMemo(() => queue.data?.items ?? [], [queue.data?.items]); const researchedItems = useMemo(() => new Map(researchResult?.results.map((result) => [result.productId, result]) ?? []), [researchResult]); const visibleItems = useMemo(() => researchField ? items.filter((item) => matchesResearchFilter(researchedItems.get(item.id), researchField)) : items, [items, researchField, researchedItems]); const selectedItems = useMemo(() => items.filter((item) => selected.includes(item.id)), [items, selected]); const publishable = selectedItems.filter((item) => !item.fiscalDivergence).map((item) => item.id);
+  useEffect(() => {
+    if (!maintenanceTarget || targetHandled) return;
+    const match = items.find((item) => item.id === maintenanceTarget.productId || item.gtin === maintenanceTarget.code || item.ean === maintenanceTarget.code) ?? targetProduct.data;
+    if (!match) return;
+    const update = window.setTimeout(() => { setEditing(match); setDraft(draftFrom(match)); setTargetHandled(true); }, 0);
+    return () => window.clearTimeout(update);
+  }, [items, maintenanceTarget, targetHandled, targetProduct.data]);
   const toggle = (id: string) => setSelected((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
   const selectAll = () => { const visibleIds = visibleItems.map((item) => item.id); const allVisibleSelected = visibleIds.every((id) => selected.includes(id)); setSelected(allVisibleSelected ? selected.filter((id) => !visibleIds.includes(id)) : [...new Set([...selected, ...visibleIds])]); };
   return <>
     <PageHeader title="Revisão de cadastros importados" description="Complete, corrija e publique os produtos importados para o Catálogo Central." action={<div className="flex gap-2"><Button onClick={() => { setResearchResult(null); setAiResult(null); setResearchField(null); research.mutate(); }} disabled={research.isPending || !(queue.data?.total ?? 0)} title="Analisa todos os itens pendentes da fila"><Globe2 size={16} />{research.isPending ? "Buscando..." : "Busca web"}</Button>{researchResult && <Button variant="secondary" onClick={() => ai.mutate()} disabled={ai.isPending || !aiEligibleIds.length} title="Atualiza somente itens sem confirmação suficiente na busca web"><Sparkles size={16} />{ai.isPending ? "Atualizando..." : `Atualização por IA${aiEligibleIds.length ? ` (${aiEligibleIds.length})` : ""}`}</Button>}</div>} />
     {queue.isError ? <ErrorState message="Não foi possível carregar a fila de revisão." /> : <>
       <div className="mb-5 grid gap-3 sm:grid-cols-3"><Metric label="Na fila" value={queue.data?.total ?? 0} /><Metric label="Selecionados" value={selected.length} /><Metric label="Prontos para publicar" value={publishable.length} tone="emerald" /></div>
+      {maintenanceTarget && !targetHandled && targetProduct.isLoading && <div className="mb-5 flex items-center gap-3 rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-sm text-cyan-900"><LoaderCircle size={18} className="animate-spin" />Localizando o cadastro relacionado ao alerta...</div>}
+      {maintenanceTarget && !targetHandled && !queue.isLoading && targetProduct.isError && !items.some((item) => item.gtin === maintenanceTarget.code || item.ean === maintenanceTarget.code) && <div className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">O registro do alerta não foi localizado nesta fila de manutenção. Ele pode já ter sido publicado ou o alerta precisa informar o <code>productId</code> do Catálogo Central.</div>}
       {research.isPending && <div role="status" className="mb-5 flex items-center gap-3 rounded-xl border border-cyan-200 bg-cyan-50 p-4 text-cyan-900 shadow-sm animate-pulse"><span className="grid size-9 place-items-center rounded-full bg-cyan-100"><LoaderCircle size={19} className="animate-spin" /></span><div><p className="font-semibold">Buscando informações na web...</p><p className="text-sm">Validando EAN, comparando fontes e preenchendo somente dados pendentes.</p></div></div>}
       {researchResult && <ResearchStatus result={researchResult} activeField={researchField} onFieldSelect={setResearchField} />}
       {aiResult && <AiStatus result={aiResult} />}

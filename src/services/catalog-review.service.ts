@@ -14,6 +14,7 @@ export type CatalogAiEnrichmentResult = { processed: number; results: { productI
 
 export const catalogReviewService = {
   list: async (page: number) => (await api.get<ApiResponse<CatalogReviewPage>>("/master-catalog/review/pending", { params: { page, pageSize: 50 } })).data.data,
+  get: async (id: string) => (await api.get<ApiResponse<CatalogReviewItem>>(`/master-catalog/${encodeURIComponent(id)}`)).data.data,
   update: async (id: string, changes: CatalogReviewChanges) => (await api.patch(`/master-catalog/review/${encodeURIComponent(id)}`, changes)).data.data,
   updateMany: async (productIds: string[], changes: CatalogReviewChanges) => (await api.post("/master-catalog/review/bulk-update", { productIds, ...changes })).data.data,
   publish: async (productIds: string[]) => (await api.post("/master-catalog/review/publish", { productIds })).data.data,

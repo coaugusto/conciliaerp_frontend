@@ -1,19 +1,21 @@
 "use client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { api, type ApiResponse } from "@/services/api/client";
 
 export type User = { name:string; email:string; role:"ADMIN"|"COMPANY_ADMIN"|"ANALYST"; mustChangePassword?:boolean; jobTitle?:string|null; phone?:string|null };
 type Theme = "light"|"dark";
 type ClientAccess = { id:string; name:string; cncCode:string };
-type AuthContextValue = { user:User|null; login:(email:string,password:string)=>Promise<User>; logout:()=>void; changePassword:(currentPassword:string,newPassword:string)=>Promise<void>; updateProfile:(profile:Pick<User,"name"|"jobTitle"|"phone">)=>Promise<void>; theme:Theme; toggleTheme:()=>void };
+type AuthContextValue = { user:User|null; hydrated:boolean; login:(email:string,password:string)=>Promise<User>; logout:()=>void; changePassword:(currentPassword:string,newPassword:string)=>Promise<void>; updateProfile:(profile:Pick<User,"name"|"jobTitle"|"phone">)=>Promise<void>; theme:Theme; toggleTheme:()=>void };
 const AuthContext = createContext<AuthContextValue|null>(null);
 const getStored = () => typeof window === "undefined" ? null : localStorage.getItem("concilia_user");
+const subscribeToHydration = () => () => undefined;
 
 export function Providers({children}:{children:React.ReactNode}) {
   const [client] = useState(() => new QueryClient({defaultOptions:{queries:{retry:1,staleTime:30_000}}}));
   const [user,setUser] = useState<User|null>(() => { const stored=getStored(); return stored?JSON.parse(stored):null; });
   const [theme,setTheme] = useState<Theme>(() => typeof window!=="undefined"&&localStorage.getItem("concilia_theme")==="dark"?"dark":"light");
+  const hydrated=useSyncExternalStore(subscribeToHydration,()=>true,()=>false);
   useEffect(()=>{document.documentElement.classList.toggle("dark",theme==="dark");localStorage.setItem("concilia_theme",theme);},[theme]);
   useEffect(()=>{(async()=>{
     if(!user||localStorage.getItem("concilia_tenant_id")||!localStorage.getItem("concilia_token"))return;
@@ -36,6 +38,6 @@ export function Providers({children}:{children:React.ReactNode}) {
   const changePassword=async(currentPassword:string,newPassword:string)=>{await api.post("/auth/change-password",{currentPassword,newPassword});if(user)persistUser({...user,mustChangePassword:false});};
   const updateProfile=async(profile:Pick<User,"name"|"jobTitle"|"phone">)=>{const next=(await api.patch<ApiResponse<Pick<User,"name"|"email"|"jobTitle"|"phone">>>("/access-profile/me",profile)).data.data;if(user)persistUser({...user,...next});};
   const toggleTheme=()=>setTheme(current=>current==="dark"?"light":"dark");
-  return <QueryClientProvider client={client}><AuthContext.Provider value={{user,login,logout,changePassword,updateProfile,theme,toggleTheme}}>{children}</AuthContext.Provider></QueryClientProvider>;
+  return <QueryClientProvider client={client}><AuthContext.Provider value={{user:hydrated?user:null,hydrated,login,logout,changePassword,updateProfile,theme:hydrated?theme:"light",toggleTheme}}>{children}</AuthContext.Provider></QueryClientProvider>;
 }
 export const useAuth=()=>{const value=useContext(AuthContext);if(!value)throw new Error("AuthProvider ausente");return value;};
