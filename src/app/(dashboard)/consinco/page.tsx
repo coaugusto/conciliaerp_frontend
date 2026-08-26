@@ -6,7 +6,7 @@ import { Button, Card, ErrorState, PageHeader } from "@/components/shared/ui";
 import { consincoService } from "@/services/consinco.service";
 import { dataIngestionService, productEntityTypes, type DataIngestionSettings } from "@/services/data-ingestion.service";
 
-const labels: Record<string,string>={MASTER_PRODUCTS_V1:"Produtos",FAMILY_DIVISION_CATEGORY_V1:"Família, divisão e categoria",FAMILY_TAX_PROFILE_V1:"Perfil tributário da família",TAXATION_UF_V1:"Tributação por UF",FAMILY_UF_DEFAULT_RATE_V1:"Alíquota padrão por UF",FAMILY_PACKAGING_V1:"Embalagens",FAMILY_SUPPLIERS_V1:"Fornecedores"};
+const labels: Record<string,string>={MASTER_PRODUCTS_V1:"Produtos",FAMILY_DIVISION_CATEGORY_V1:"Família, divisão e categoria",FAMILY_TAX_PROFILE_V1:"Perfil tributário da família",TAXATION_UF_V1:"Tributação por UF",FAMILY_UF_DEFAULT_RATE_V1:"Alíquota padrão por UF",FAMILY_PACKAGING_V1:"Embalagens",FAMILY_SUPPLIERS_V1:"Fornecedores",FISCAL_DOCUMENT_ITEMS_V1:"Itens de documentos fiscais"};
 export default function ConsincoPage(){
  const [name,setName]=useState("Consinco Produção"),[baseUrl,setBaseUrl]=useState(""),[apiKey,setApiKey]=useState("");
  const [companyId,setCompanyId]=useState(()=>typeof window==="undefined"?"":localStorage.getItem("concilia_company_id")??"");

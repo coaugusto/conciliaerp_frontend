@@ -1,6 +1,6 @@
 import { api, type ApiResponse } from './api/client';
 
-export const productEntityTypes = ['MASTER_PRODUCTS_V1', 'FAMILY_DIVISION_CATEGORY_V1', 'FAMILY_TAX_PROFILE_V1', 'TAXATION_UF_V1', 'FAMILY_UF_DEFAULT_RATE_V1', 'FAMILY_PACKAGING_V1', 'FAMILY_SUPPLIERS_V1'] as const;
+export const productEntityTypes = ['MASTER_PRODUCTS_V1', 'FAMILY_DIVISION_CATEGORY_V1', 'FAMILY_TAX_PROFILE_V1', 'TAXATION_UF_V1', 'FAMILY_UF_DEFAULT_RATE_V1', 'FAMILY_PACKAGING_V1', 'FAMILY_SUPPLIERS_V1', 'FISCAL_DOCUMENT_ITEMS_V1'] as const;
 export type ProductEntityType = typeof productEntityTypes[number];
 export type DataIngestionSettings = { id: string; companyId: string; connectorDatabaseEnabled: boolean; consincoApiEnabled: boolean; spedEnabled: boolean; catalogReconciliationEnabled: boolean; fiscalValidationEnabled: boolean; entityTypes: ProductEntityType[] };
 export type ReconciliationSummary = { total: number; matched: number; divergent: number; missingInCentral: number };

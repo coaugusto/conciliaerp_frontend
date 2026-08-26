@@ -57,7 +57,7 @@ export default function CommercialPortal() {
     </TabDropdown>
     {tenantId && user?.role === "ADMIN" && <TabDropdown title="Usuários do cliente" description="Cadastre, edite e reenvie convites de acesso."><ClientUsersCard tenantId={tenantId} /></TabDropdown>}
     </div>}
-    {activeTab === "parameters" && <div role="tabpanel" className="max-w-5xl"><TabDropdown title="Serviços contratados" description="Defina as rotinas autorizadas para o cliente." defaultOpen>{tenantId && canInstallConnector ? <ClientServicesCard /> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente e confirme seu perfil de administrador para configurar os serviços contratados.</Card>}</TabDropdown></div>}
+    {activeTab === "parameters" && <div role="tabpanel" className="max-w-5xl"><TabDropdown title="Serviços contratados" description="Defina as rotinas autorizadas para o cliente." defaultOpen>{tenantId && canInstallConnector ? <ClientServicesCard key={tenantId} tenantId={tenantId} /> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente e confirme seu perfil de administrador para configurar os serviços contratados.</Card>}</TabDropdown></div>}
     {activeTab === "connector" && <div role="tabpanel" className="max-w-5xl">
     {canInstallConnector &&
     <TabDropdown title="Instalação do Connector" description="Baixe o agente local para o ambiente do cliente." defaultOpen>
@@ -105,8 +105,8 @@ const defaultClientServices: ServiceDefinition[] = [
   { code: "sped_processing", name: "Processamento automático de SPED", description: "Analisa cada novo SPED recebido pelo Connector.", input: "Arquivo SPED", output: "Propostas e alertas fiscais", enabled: false, inputEnabled: true, outputEnabled: true, implementation: false },
 ];
 
-function ClientServicesCard() {
-  const services = useQuery({ queryKey: ["commercial", "client-services"], queryFn: commercialService.clientServices, retry: false });
+function ClientServicesCard({ tenantId }: { tenantId: string }) {
+  const services = useQuery({ queryKey: ["commercial", "client-services", tenantId], queryFn: commercialService.clientServices, retry: false });
   const [draft, setDraft] = useState<ClientServiceFlag[] | null>(null);
   const source = draft ?? services.data;
   const currentServices = defaultClientServices.map((definition) => ({ ...definition, ...source?.find((service) => service.code === definition.code), name: definition.name, inputEnabled: source?.find((service) => service.code === definition.code)?.inputEnabled ?? definition.inputEnabled, outputEnabled: source?.find((service) => service.code === definition.code)?.outputEnabled ?? definition.outputEnabled }));
