@@ -2,7 +2,11 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Documentação operacional
 
-- [Criação e publicação de consultas do Connector](./docs/consultas-connector.md)
+- Portal: `/documentation`
+- [Processos do Connector](./public/documentation/connector/processos.md)
+- [Processos do Frontend](./public/documentation/frontend/processos.md)
+- [Processos de extração e listagem do Backend](./public/documentation/backend/processos-extracao-consinco.md)
+- [Criação e publicação de consultas do Connector](./public/documentation/connector/consultas.md)
 
 ## Getting Started
 

@@ -31,6 +31,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, hydrated, logout, theme, toggleTheme } = useAuth();
   const tenants = useQuery({ queryKey: ["client-tenants"], queryFn: async () => (await api.get<ApiResponse<ClientTenant[]>>("/auth/tenants")).data.data, enabled: !!user });
   const [tenantId, setTenantId] = useState(() => typeof window === "undefined" ? "" : localStorage.getItem("concilia_tenant_id") ?? "");
+  const [tenantSearch, setTenantSearch] = useState(() => typeof window === "undefined" ? "" : `${localStorage.getItem("concilia_cnc_code") ?? ""}${localStorage.getItem("concilia_tenant_name") ? ` · ${localStorage.getItem("concilia_tenant_name")}` : ""}`);
   const [companyId, setCompanyId] = useState(() => typeof window === "undefined" ? "" : localStorage.getItem("concilia_company_id") ?? "");
   const clients = useQuery({ queryKey: ["client-context", tenantId], queryFn: clientContextService.list, enabled: !!user && !!tenantId });
   const [menuExpanded, setMenuExpanded] = useState(false);
@@ -68,7 +69,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!hydrated || !user) return null;
 
   const visibleNavigation = navigation.filter((item) => !item.admin || user.role === "ADMIN");
-  const selectTenant = async (id: string) => { const response = await api.post<ApiResponse<{ accessToken: string; tenant: ClientTenant }>>("/auth/select-tenant", { tenantId: id }); const selected = response.data.data; localStorage.setItem("concilia_token", selected.accessToken); localStorage.setItem("concilia_tenant_id", selected.tenant.id); localStorage.setItem("concilia_tenant_name", selected.tenant.name); localStorage.setItem("concilia_cnc_code", selected.tenant.cncCode); localStorage.removeItem("concilia_company_id"); setTenantId(selected.tenant.id); window.location.reload(); };
+  const selectTenant = async (id: string) => { const response = await api.post<ApiResponse<{ accessToken: string; tenant: ClientTenant }>>("/auth/select-tenant", { tenantId: id }); const selected = response.data.data; localStorage.setItem("concilia_token", selected.accessToken); localStorage.setItem("concilia_tenant_id", selected.tenant.id); localStorage.setItem("concilia_tenant_name", selected.tenant.name); localStorage.setItem("concilia_cnc_code", selected.tenant.cncCode); localStorage.removeItem("concilia_company_id"); setTenantId(selected.tenant.id); setTenantSearch(`${selected.tenant.cncCode} · ${selected.tenant.name}`); window.location.reload(); };
+  const selectTenantFromSearch = async (value: string) => {
+    const normalized = value.trim().toLocaleLowerCase("pt-BR");
+    const tenant = (tenants.data ?? []).find(item => item.id === value || item.cncCode.toLocaleLowerCase("pt-BR") === normalized || item.name.toLocaleLowerCase("pt-BR") === normalized || `${item.cncCode} · ${item.name}`.toLocaleLowerCase("pt-BR") === normalized);
+    if (tenant && tenant.id !== tenantId) await selectTenant(tenant.id);
+  };
   return (
     <div className="min-h-screen bg-[#f7f8fc] text-slate-800">
       <header className="sticky top-0 z-30 h-[72px] border-b border-slate-200 bg-white">
@@ -78,10 +84,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="text-lg font-bold tracking-tight">CONCILIA <small className="font-medium text-slate-500">ERP</small></span>
           </Link>
           <div className="hidden h-8 w-px bg-slate-200 lg:block" />
-          <label className="hidden w-56 items-center gap-2 rounded border border-slate-300 bg-slate-50 px-2 py-1.5 text-xs text-slate-600 lg:flex"><span className="whitespace-nowrap font-semibold">Ambiente:</span><select value={tenantId} onChange={event => selectTenant(event.target.value)} className="min-w-0 flex-1 bg-transparent font-medium outline-none"><option value="" disabled>Selecione</option>{(tenants.data ?? []).map(tenant => <option key={tenant.id} value={tenant.id}>{tenant.cncCode} · {tenant.name}</option>)}</select></label>
+          <label className="hidden w-[21rem] items-center gap-2 rounded border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 lg:flex"><span className="whitespace-nowrap font-semibold">Ambiente:</span><input list="concilia-tenant-options" value={tenantSearch} onChange={event => setTenantSearch(event.target.value)} onBlur={event => selectTenantFromSearch(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); selectTenantFromSearch(event.currentTarget.value); } }} placeholder="Digite o nome ou CNC_CODE" aria-label="Buscar ambiente por nome ou CNC_CODE" className="min-w-0 flex-1 bg-transparent font-medium text-slate-800 outline-none"/><datalist id="concilia-tenant-options">{(tenants.data ?? []).map(tenant => <option key={tenant.id} value={`${tenant.cncCode} · ${tenant.name}`}>{tenant.id}</option>)}</datalist></label>
           <div className="hidden min-w-0 flex-1 truncate text-xs text-slate-500 xl:block">Início <span className="px-1">›</span> {activeItem?.label ?? "Concilia ERP"}</div>
           <div className="ml-auto flex items-center gap-3 text-xs text-slate-500">
-            {user.role === "ADMIN" && <Link href="/documentation/connector-queries" className="hidden items-center gap-1.5 hover:text-[#176a84] md:flex"><BookOpen size={16} className="text-cyan-600" />Documentação</Link>}
+            {user.role === "ADMIN" && <Link href="/documentation" className="hidden items-center gap-1.5 hover:text-[#176a84] md:flex"><BookOpen size={16} className="text-cyan-600" />Documentação</Link>}
             <button className="relative rounded p-2 hover:bg-slate-100" aria-label="Notificações"><Bell size={18} /><i className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-amber-400" /></button>
             <button onClick={toggleTheme} className="rounded p-2 hover:bg-slate-100" aria-label={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button>
             <Link href="/profile" className="flex items-center gap-1 rounded px-2 py-1.5 hover:bg-slate-100"><span className="hidden text-right sm:block"><b className="block text-sm font-semibold text-slate-700">{user.name}</b><span>{user.role === "ADMIN" ? "Administrador" : user.role === "COMPANY_ADMIN" ? "Administrador do cliente" : "Analista"}</span></span><ChevronDown size={15} /></Link>

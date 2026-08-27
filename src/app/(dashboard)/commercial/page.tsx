@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, Copy, Download, KeyRound, Settings2, ShieldCheck } from "lucide-react";
+import { ChevronDown, Copy, Download, KeyRound, Play, RefreshCw, Settings2, ShieldCheck } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button, Card, ErrorState, PageHeader } from "@/components/shared/ui";
 import { commercialService, type ClientServiceFlag } from "@/services/commercial.service";
@@ -9,6 +9,7 @@ import { connectorDesktopService } from "@/services/connector-desktop.service";
 import { api, type ApiResponse } from "@/services/api/client";
 import { useAuth } from "@/providers/providers";
 import { ClientUsersCard } from "@/components/commercial/client-users-card";
+import { connectorInitialLoadsService } from "@/services/connector-initial-loads.service";
 
 type ClientTenant = { id: string; name: string; cncCode: string };
 
@@ -23,13 +24,14 @@ export default function CommercialPortal() {
   const [key, setKey] = useState<string>();
   const [copied, setCopied] = useState(false);
   const [tenantId, setTenantId] = useState(() => typeof window === "undefined" ? "" : localStorage.getItem("concilia_tenant_id") ?? "");
+  const [companyId, setCompanyId] = useState(() => typeof window === "undefined" ? "" : localStorage.getItem("concilia_company_id") ?? "");
   const [tenantName, setTenantName] = useState(() => typeof window === "undefined" ? "" : localStorage.getItem("concilia_tenant_name") ?? "");
   const [editingName, setEditingName] = useState(() => typeof window === "undefined" ? "" : localStorage.getItem("concilia_tenant_name") ?? "");
   const [cncCode, setCncCode] = useState(() => typeof window === "undefined" ? "" : localStorage.getItem("concilia_cnc_code") ?? "");
   const [tenants, setTenants] = useState<ClientTenant[]>([]);
   const [newClientName, setNewClientName] = useState("");
   const [activeTab, setActiveTab] = useState<"registration" | "parameters" | "connector">("registration");
-  useEffect(() => { const refresh = () => { const name = localStorage.getItem("concilia_tenant_name") ?? ""; setTenantId(localStorage.getItem("concilia_tenant_id") ?? ""); setTenantName(name); setEditingName(name); setCncCode(localStorage.getItem("concilia_cnc_code") ?? ""); }; window.addEventListener("concilia:tenant-changed", refresh); return () => window.removeEventListener("concilia:tenant-changed", refresh); }, []);
+  useEffect(() => { const refresh = () => { const name = localStorage.getItem("concilia_tenant_name") ?? ""; setTenantId(localStorage.getItem("concilia_tenant_id") ?? ""); setCompanyId(localStorage.getItem("concilia_company_id") ?? ""); setTenantName(name); setEditingName(name); setCncCode(localStorage.getItem("concilia_cnc_code") ?? ""); }; window.addEventListener("concilia:tenant-changed", refresh); window.addEventListener("concilia:company-changed", refresh); return () => { window.removeEventListener("concilia:tenant-changed", refresh); window.removeEventListener("concilia:company-changed", refresh); }; }, []);
   useEffect(() => { api.get<ApiResponse<ClientTenant[]>>("/auth/tenants").then(response => setTenants(response.data.data)).catch(() => setTenants([])); }, []);
   const selectClient = async (id: string) => { try { const response = await api.post<ApiResponse<{ accessToken: string; tenant: ClientTenant }>>("/auth/select-tenant", { tenantId: id }); const selected = response.data.data; localStorage.setItem("concilia_token", selected.accessToken); localStorage.setItem("concilia_tenant_id", selected.tenant.id); localStorage.setItem("concilia_tenant_name", selected.tenant.name); localStorage.setItem("concilia_cnc_code", selected.tenant.cncCode); setTenantId(selected.tenant.id); setTenantName(selected.tenant.name); setEditingName(selected.tenant.name); setCncCode(selected.tenant.cncCode); window.dispatchEvent(new Event("concilia:tenant-changed")); } catch { /* A tela mantém o cliente atual caso a seleção seja recusada. */ } };
   const createClient = useMutation({ mutationFn: async () => { const created = (await api.post<ApiResponse<ClientTenant & { slug?: string }>>("/tenants", { name: newClientName })).data.data; return { ...created, cncCode: created.cncCode ?? created.slug ?? "" }; }, onSuccess: async client => { setTenants(current => [...current, client].sort((a, b) => (a.cncCode ?? "").localeCompare(b.cncCode ?? ""))); setNewClientName(""); await selectClient(client.id); } });
@@ -59,6 +61,9 @@ export default function CommercialPortal() {
     </div>}
     {activeTab === "parameters" && <div role="tabpanel" className="max-w-5xl"><TabDropdown title="Serviços contratados" description="Defina as rotinas autorizadas para o cliente." defaultOpen>{tenantId && canInstallConnector ? <ClientServicesCard key={tenantId} tenantId={tenantId} /> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente e confirme seu perfil de administrador para configurar os serviços contratados.</Card>}</TabDropdown></div>}
     {activeTab === "connector" && <div role="tabpanel" className="max-w-5xl">
+    <TabDropdown title="Cargas e jobs do Connector" description="Acompanhe, inicie ou retome a extração do cliente selecionado." defaultOpen>
+      <ConnectorJobsCard tenantId={tenantId} companyId={companyId} />
+    </TabDropdown>
     {canInstallConnector &&
     <TabDropdown title="Instalação do Connector" description="Baixe o agente local para o ambiente do cliente." defaultOpen>
     <Card className="mb-5 max-w-3xl p-5">
@@ -122,3 +127,29 @@ function ClientServicesCard({ tenantId }: { tenantId: string }) {
 }
 
 function FlowOption({ label, description, checked, change }: { label: string; description: string; checked: boolean; change: (checked: boolean) => void }) { return <label className="flex cursor-pointer items-start gap-3 rounded-lg bg-white p-3"><input type="checkbox" className="mt-0.5 size-4 accent-cyan-700" checked={checked} onChange={(event) => change(event.target.checked)} /><span><strong className="block text-xs uppercase tracking-wide text-cyan-700">{label}</strong><span className="mt-1 block text-sm text-slate-700">{description}</span></span></label>; }
+
+function ConnectorJobsCard({ tenantId, companyId }: { tenantId: string; companyId: string }) {
+  const panel = useQuery({ queryKey: ["connector-initial-loads", tenantId, companyId], queryFn: () => connectorInitialLoadsService.list(companyId || undefined), enabled: !!tenantId, refetchInterval: 10000 });
+  const [connectorId, setConnectorId] = useState("");
+  const [selectedCompanyId, setSelectedCompanyId] = useState(companyId);
+  const refresh = () => panel.refetch();
+  const start = useMutation({ mutationFn: () => connectorInitialLoadsService.start(connectorId, selectedCompanyId), onSuccess: refresh });
+  const bootstrap = useMutation({ mutationFn: () => connectorInitialLoadsService.bootstrap(connectorId), onSuccess: refresh });
+  const resume = useMutation({ mutationFn: (loadId:string) => connectorInitialLoadsService.resume(loadId), onSuccess: refresh });
+  const retry = useMutation({ mutationFn: (jobId:string) => connectorInitialLoadsService.retryJob(jobId), onSuccess: refresh });
+  useEffect(() => { if (!selectedCompanyId && panel.data?.selectedCompanyId) setSelectedCompanyId(panel.data.selectedCompanyId); }, [panel.data?.selectedCompanyId, selectedCompanyId]);
+  if (panel.isLoading) return <Card className="p-6 text-sm text-slate-500">Carregando cargas e jobs...</Card>;
+  if (panel.isError) return <ErrorState message="Não foi possível consultar as cargas do Connector. Verifique se o backend atualizado foi publicado." />;
+  const data = panel.data!;
+  const effectiveCompanyId = selectedCompanyId || data.selectedCompanyId || "";
+  const activeLoad = data.loads[0];
+  return <Card className="p-5">
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-bold text-slate-900">Execução da carga inicial</h2><p className="mt-1 text-sm text-slate-500">Os jobs ficam na API até o Connector solicitar a próxima execução.</p></div><Button variant="secondary" onClick={refresh} disabled={panel.isFetching}><RefreshCw size={16}/>{panel.isFetching ? "Atualizando..." : "Atualizar"}</Button></div>
+    <div className="mt-5 grid gap-3 sm:grid-cols-5">{[["Pendentes",data.summary.pending],["Executando",data.summary.running],["Concluídos",data.summary.completed],["Falhos",data.summary.failed],["Total",data.summary.total]].map(([label,value])=><div key={String(label)} className="rounded-lg border border-slate-200 bg-slate-50 p-3"><span className="text-xs font-semibold uppercase text-slate-500">{label}</span><strong className="mt-1 block text-xl text-slate-900">{value}</strong></div>)}</div>
+    <div className="mt-5 grid gap-3 md:grid-cols-2"><label className="text-sm font-semibold text-slate-700">Connector<select className="mt-1.5 h-10 w-full rounded-md border border-slate-300 bg-white px-3 font-mono text-sm font-normal" value={connectorId} onChange={event=>setConnectorId(event.target.value)}><option value="">Selecione o Connector</option>{data.connectors.map(connector=><option key={connector.connectorId} value={connector.connectorId}>{connector.machineName||"Connector"} — {connector.connectorId}{connector.environment ? ` (${connector.environment})` : ""}</option>)}</select></label>{data.companies.length>0&&<label className="text-sm font-semibold text-slate-700">Empresa extraída<select className="mt-1.5 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-normal" value={effectiveCompanyId} onChange={event=>setSelectedCompanyId(event.target.value)}><option value="">Selecione a empresa</option>{data.companies.map(company=><option key={company.id} value={company.id}>{company.tradeName||company.legalName} — {company.document}</option>)}</select></label>}</div>
+    <div className="mt-3 flex flex-wrap gap-3"><Button variant={data.companies.length===0?"primary":"secondary"} onClick={()=>bootstrap.mutate()} disabled={!connectorId||bootstrap.isPending}><RefreshCw size={16}/>{bootstrap.isPending?"Enfileirando...":data.companies.length===0?"Identificar empresas no Consinco":"Atualizar empresas do Consinco"}</Button>{data.companies.length>0&&<Button onClick={()=>start.mutate()} disabled={!connectorId||!effectiveCompanyId||start.isPending}><Play size={16}/>{start.isPending?"Iniciando...":"Iniciar carga"}</Button>}{activeLoad && !["APPROVED","PENDING_VALIDATION"].includes(activeLoad.status) && <Button variant="secondary" onClick={()=>resume.mutate(activeLoad.id)} disabled={resume.isPending}><RefreshCw size={16}/>{resume.isPending?"Retomando...":"Retomar carga"}</Button>}</div>
+    {data.companies.length===0&&<p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-800">O ambiente está selecionado, mas nenhuma empresa jurídica foi importada ainda. Execute “Identificar empresas no Consinco”; após o Connector processar MAX_EMPRESA_V1, a empresa aparecerá aqui automaticamente.</p>}
+    {(start.isError||bootstrap.isError||resume.isError||retry.isError)&&<div className="mt-4"><ErrorState message="A operação não foi concluída. Verifique consultas ativas, serviço de banco habilitado e estado da carga."/></div>}
+    <div className="mt-5 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr>{["Consulta","Versão","Status","Solicitado","Erro","Ação"].map(label=><th key={label} className="border-b px-3 py-2 text-xs uppercase text-slate-500">{label}</th>)}</tr></thead><tbody>{data.jobs.slice(0,50).map(job=><tr key={job.id}><td className="border-b px-3 py-2 font-mono text-xs">{job.queryCode}</td><td className="border-b px-3 py-2">v{job.queryVersion}</td><td className="border-b px-3 py-2 font-semibold">{job.status}</td><td className="border-b px-3 py-2 whitespace-nowrap">{new Date(job.requestedAt).toLocaleString("pt-BR")}</td><td className="max-w-xs truncate border-b px-3 py-2 text-red-700" title={job.errorMessage||""}>{job.errorMessage||"—"}</td><td className="border-b px-3 py-2">{["FAILED","EXPIRED"].includes(job.status)?<Button variant="secondary" onClick={()=>retry.mutate(job.id)} disabled={retry.isPending}>Reenfileirar</Button>:"—"}</td></tr>)}</tbody></table>{!data.jobs.length&&<p className="p-6 text-center text-sm text-slate-500">Nenhum job criado. Selecione o Connector e clique em Iniciar carga.</p>}</div>
+  </Card>;
+}

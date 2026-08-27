@@ -1,7 +1,7 @@
 import { api, type ApiResponse } from "./api/client";
 
 export type ConnectorTransmission = {
-  id: string; sourceName: string | null; sourceSize: number | null; status: string; totalRows: number; processedRows: number; duplicateRows: number; error: string | null; createdAt: string;
+  id: string; sourceName: string | null; sourceSize: number | null; inputType?: string | null; queryCode?: string | null; status: string; totalRows: number; processedRows: number; duplicateRows: number; error: string | null; createdAt: string;
   records: Array<{ id: string; rowNumber: number; canonicalDescription: string; gtin: string | null; ncm: string | null; cest: string | null; unit: string | null; category: string | null; confidence: number; duplicateOfRecordId: string | null; rawData: Record<string, unknown> }>;
 };
 export type TransmissionPage = { items: ConnectorTransmission[]; total: number; page: number; pageSize: number; totalPages: number };
@@ -11,9 +11,9 @@ export type SpedFiscalProposal = { id: string; productCode: string; canonicalDes
 export type ResetConnectorLoadResult = { deletedRecords:number; deletedExecutions:number; deletedProposals:number; connectorCommand:{id:string;status:"DELIVERED"|"PENDING";connectorId:string|null} };
 
 export const connectorTransmissionsService = {
-  list: async (params: { page: number; file?: string }) => (await api.get<ApiResponse<TransmissionPage>>("/intelligent-sanitization/executions", { params: { page: params.page, pageSize: 50, ...(params.file ? { file: params.file } : {}) } })).data.data,
-  summary: async () => (await api.get<ApiResponse<TransmissionSummary>>("/intelligent-sanitization/summary")).data.data,
-  products: async (issue: string) => (await api.get<ApiResponse<ValidatedProduct[]>>("/intelligent-sanitization/products", { params: issue ? { issue } : {} })).data.data,
+  list: async (params: { page: number; file?: string; origin?: "API" | "SPED"; queryCode?: string }) => (await api.get<ApiResponse<TransmissionPage>>("/intelligent-sanitization/executions", { params: { page: params.page, pageSize: 50, ...(params.file ? { file: params.file } : {}), ...(params.origin ? { inputType: params.origin } : {}), ...(params.queryCode ? { queryCode: params.queryCode } : {}) } })).data.data,
+  summary: async (params?: { origin?: "API" | "SPED"; queryCode?: string }) => (await api.get<ApiResponse<TransmissionSummary>>("/intelligent-sanitization/summary", { params: { ...(params?.origin ? { inputType: params.origin } : {}), ...(params?.queryCode ? { queryCode: params.queryCode } : {}) } })).data.data,
+  products: async (issue: string, params?: { origin?: "API" | "SPED"; queryCode?: string }) => (await api.get<ApiResponse<ValidatedProduct[]>>("/intelligent-sanitization/products", { params: { ...(issue ? { issue } : {}), ...(params?.origin ? { inputType: params.origin } : {}), ...(params?.queryCode ? { queryCode: params.queryCode } : {}) } })).data.data,
   record: async (id: string) => (await api.get<ApiResponse<ConnectorTransmissionRecord>>(`/intelligent-sanitization/records/${encodeURIComponent(id)}`)).data.data,
   spedProposals: async () => (await api.get<ApiResponse<{ items: SpedFiscalProposal[]; total: number }>>("/intelligent-sanitization/sped-proposals")).data.data,
   resetLoad: async () => (await api.post<ApiResponse<ResetConnectorLoadResult>>("/connector-data/reset", { clearImportedData:true, clearConnectorQueue:true, command:"CLEAR_IMPORTED_LOAD" })).data.data,
