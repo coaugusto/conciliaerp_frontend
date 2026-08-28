@@ -3,16 +3,74 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { Braces, Eye, FileText } from "lucide-react";
+import { Braces, Database, Eye, FileText } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader } from "@/components/shared/ui";
 import { connectorTransmissionsService, type ConnectorTransmission, type TransmissionPage, type TransmissionSummary, type ValidatedProduct } from "@/services/connector-transmissions.service";
-import { extractionTypes, type ExtractionType } from "@/services/connector-data.service";
+import { connectorDataService, extractionTypes, type ExtractionPage, type ExtractionSummary, type ExtractionType } from "@/services/connector-data.service";
 
 const issueLabels: Record<string, string> = { all: "Todos os itens", ok: "Itens sem pendência", ncm: "Itens com NCM pendente", cest: "Itens com CEST pendente", cst: "Itens com CST ICMS pendente", cfop: "Itens com CFOP pendente" };
 type OriginFilter = "ALL" | "API" | "SPED";
 type QueryFilter = "ALL" | ExtractionType;
+type PageSource = "INITIAL_LOAD" | "MANUAL";
 
 export default function ConnectorDataPage() {
+  const [source, setSource] = useState<PageSource>("INITIAL_LOAD");
+  return <>
+    <PageHeader title="Cadastro fiscal importado" description="Selecione um status para consultar os produtos recebidos e suas pendências de cadastro." />
+    <div role="tablist" aria-label="Origem dos dados importados" className="mb-5 flex max-w-xl gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1.5">
+      {([["INITIAL_LOAD", "Carga inicial (Connector)"], ["MANUAL", "Importação manual"]] as const).map(([value, label]) => <button key={value} role="tab" aria-selected={source === value} onClick={() => setSource(value)} className={`min-w-48 flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition ${source === value ? "bg-white text-cyan-800 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`}>{label}</button>)}
+    </div>
+    {source === "INITIAL_LOAD" ? <InitialLoadData /> : <ManualImportData />}
+  </>;
+}
+
+function InitialLoadData() {
+  const [entityType, setEntityType] = useState<ExtractionType | "">("");
+  const [page, setPage] = useState(1);
+  const summary = useQuery({ queryKey: ["connector-data-summary"], queryFn: connectorDataService.summary });
+  const list = useQuery({ queryKey: ["connector-data-list", entityType, page], queryFn: () => connectorDataService.list(entityType as ExtractionType, page, 50), enabled: Boolean(entityType) });
+  return <>
+    <p className="mb-4 text-sm text-slate-500">Registros recebidos pelos jobs da carga inicial controlada (aba Connector do Portal do Cliente). Selecione uma consulta para ver os registros brutos importados.</p>
+    {summary.isError ? <ErrorState message="Não foi possível carregar o resumo da carga inicial." /> : <InitialLoadSummaryCards summary={summary.data} loading={summary.isLoading} selected={entityType} select={(value) => { setEntityType(value); setPage(1); }} />}
+    {entityType && (list.isError ? <ErrorState message="Não foi possível carregar os registros desta consulta." /> : <InitialLoadRecordsTable entityType={entityType} data={list.data} loading={list.isLoading} page={page} setPage={setPage} />)}
+  </>;
+}
+
+function InitialLoadSummaryCards({ summary, loading, selected, select }: { summary?: ExtractionSummary[]; loading: boolean; selected: ExtractionType | ""; select: (value: ExtractionType) => void }) {
+  return <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Resumo por consulta da carga inicial">
+    {extractionTypes.map(([code, label]) => {
+      const found = summary?.find(item => item.entityType === code);
+      return <button key={code} type="button" onClick={() => select(code)} aria-pressed={selected === code} className="rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <Card className={`h-full p-4 transition hover:border-blue-300 hover:shadow-sm ${selected === code ? "border-blue-500 bg-blue-50" : ""}`}>
+          <p className="text-xs font-semibold uppercase text-slate-500">{label}</p>
+          <p className="mt-2 text-2xl font-bold text-slate-900">{loading ? "—" : found?.total ?? 0}</p>
+          <p className="mt-1 truncate font-mono text-[11px] text-slate-500" title={code}>{code}</p>
+          <p className="mt-2 text-xs text-blue-700">{found?.lastReceivedAt ? `Último recebimento: ${new Date(found.lastReceivedAt).toLocaleString("pt-BR")}` : "Nenhum registro recebido"}</p>
+        </Card>
+      </button>;
+    })}
+  </section>;
+}
+
+function InitialLoadRecordsTable({ entityType, data, loading, page, setPage }: { entityType: ExtractionType; data?: ExtractionPage; loading: boolean; page: number; setPage: (page: number) => void }) {
+  const pages = Math.max(1, data?.totalPages ?? 1);
+  return <Card className="mb-5 overflow-hidden">
+    <div className="flex flex-wrap items-center gap-3 border-b bg-slate-50 px-5 py-4"><Database size={16} className="text-cyan-700" /><b className="text-sm text-slate-800">Registros recebidos · {entityType}</b><span className="ml-auto text-xs text-slate-500">{data?.total ?? 0} registro(s)</span></div>
+    {loading ? <p className="p-5 text-sm text-slate-500">Carregando registros...</p> : !data?.items.length ? <p className="p-5 text-sm text-slate-500">Nenhum registro recebido para esta consulta.</p> : <>
+      <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead><tr className="border-b text-xs uppercase text-slate-500"><th className="p-3">Chave de origem</th><th className="p-3">Alterado na origem</th><th className="p-3">Recebido</th><th className="p-3">Ação</th></tr></thead><tbody>
+        {data.items.map(item => <tr className="border-b border-slate-100 align-top" key={item.id}>
+          <td className="p-3 font-mono text-xs">{item.sourceKey}</td>
+          <td className="p-3 whitespace-nowrap">{item.sourceChangedAt ? new Date(item.sourceChangedAt).toLocaleString("pt-BR") : "—"}</td>
+          <td className="p-3 whitespace-nowrap">{new Date(item.receivedAt).toLocaleString("pt-BR")}</td>
+          <td className="p-3"><Link href={entityType === "MASTER_PRODUCTS_V1" ? `/connector-data/initial-load/products/${encodeURIComponent(item.sourceKey)}` : `/connector-data/initial-load/records/${encodeURIComponent(item.id)}`} className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-800"><Eye size={14} />Ver detalhes</Link></td>
+        </tr>)}
+      </tbody></table></div>
+      <div className="flex items-center justify-between p-3 text-sm"><span>Página {page}/{pages}</span><div className="flex gap-2"><button className="rounded border px-2 py-1 disabled:opacity-50" disabled={page === 1} onClick={() => setPage(page - 1)}>Anterior</button><button className="rounded border px-2 py-1 disabled:opacity-50" disabled={page === pages} onClick={() => setPage(page + 1)}>Próxima</button></div></div>
+    </>}
+  </Card>;
+}
+
+function ManualImportData() {
   const [fileFilter, setFileFilter] = useState("");
   const [transmissionPage, setTransmissionPage] = useState(1);
   const [origin, setOrigin] = useState<OriginFilter>("ALL");
@@ -25,7 +83,6 @@ export default function ConnectorDataPage() {
   const proposals = useQuery({ queryKey: ["sped-fiscal-proposals"], queryFn: connectorTransmissionsService.spedProposals });
 
   return <>
-    <PageHeader title="Cadastro fiscal importado" description="Selecione um status para consultar os produtos recebidos e suas pendências de cadastro." />
     <DataFilters origin={origin} queryCode={queryCode} setOrigin={(value)=>{setOrigin(value);setIssue("");setTransmissionPage(1);}} setQueryCode={(value)=>{setQueryCode(value);setIssue("");setTransmissionPage(1);}} />
     {summary.isError ? <ErrorState message="Não foi possível carregar o resumo dos produtos importados." /> : <TransmissionSummaryCards summary={summary.data} loading={summary.isLoading} selectedIssue={issue} origin={origin} queryCode={queryCode} select={setIssue} />}
     {origin!=="API"&&(queryCode==="ALL"||queryCode==="FISCAL_DOCUMENT_ITEMS_V1")&&proposals.data?.items.length ? <SpedProposals items={proposals.data.items} total={proposals.data.total} /> : null}
