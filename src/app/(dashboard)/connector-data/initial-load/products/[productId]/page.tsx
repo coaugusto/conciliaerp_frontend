@@ -7,7 +7,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Barcode, Boxes, Database, Pencil, Percent, PackageSearch, Save, Truck, X } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader, SeverityBadge, dateTime } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
-import { fiscalComplianceService, type ImportedRecord } from "@/services/fiscal-compliance.service";
+import { fiscalComplianceService, type ImportedRecord, type TaxationOperationGroup } from "@/services/fiscal-compliance.service";
 import { consincoField } from "@/services/consinco-field-map";
 
 export default function InitialLoadProductDetailPage() {
@@ -37,7 +37,7 @@ export default function InitialLoadProductDetailPage() {
     <RecordSection icon={<Barcode size={19} className="text-cyan-700" />} title="Códigos de acesso (GTIN/EAN)" entityType="PRODUCT_ACCESS_CODES_V1" records={data.accessCodes} empty="Nenhum código de acesso do tipo EAN utilizado para venda foi recebido para este produto." queryId={id} />
     <RecordSection icon={<Boxes size={19} className="text-cyan-700" />} title="Classificação da família" entityType="FAMILY_DIVISION_CATEGORY_V1" records={data.family.classification} empty="Nenhum registro de classificação recebido para esta família." queryId={id} />
     <RecordSection icon={<Percent size={19} className="text-cyan-700" />} title="Perfil tributário da família" entityType="FAMILY_TAX_PROFILE_V1" records={data.taxation.profiles} empty="Nenhum perfil tributário recebido para esta família." queryId={id} />
-    <RecordSection icon={<Percent size={19} className="text-cyan-700" />} title="Tributação por UF" entityType="TAXATION_UF_V1" records={data.taxation.rulesByState} empty="Nenhuma regra por UF recebida." queryId={id} />
+    <TaxationByOperationSection groups={data.taxation.byOperation} queryId={id} />
     <RecordSection icon={<Percent size={19} className="text-cyan-700" />} title="Alíquotas padrão por UF" entityType="FAMILY_UF_DEFAULT_RATE_V1" records={data.taxation.defaultRates} empty="Nenhuma alíquota padrão recebida." queryId={id} />
     <RecordSection icon={<Database size={19} className="text-cyan-700" />} title="Embalagens" entityType="FAMILY_PACKAGING_V1" records={data.packaging} empty="Nenhuma embalagem recebida para esta família." queryId={id} />
     <RecordSection icon={<Truck size={19} className="text-cyan-700" />} title="Fornecedores" entityType="FAMILY_SUPPLIERS_V1" records={data.suppliers} empty="Nenhum fornecedor recebido para esta família." queryId={id} />
@@ -87,6 +87,21 @@ function DetailCard({ recordId, title, entityType, fields, keys, labels, queryId
 function RecordSection({ icon, title, entityType, records, empty, queryId }: { icon: React.ReactNode; title: string; entityType: string; records: ImportedRecord[]; empty: string; queryId: string }) {
   return <Card className="mt-5 overflow-hidden"><div className="flex items-center gap-2 border-b border-slate-200 p-4"><span>{icon}</span><h2 className="font-bold text-slate-900">{title}</h2><span className="ml-auto text-xs text-slate-500">{records.length} registro(s)</span></div>
     {!records.length ? <p className="p-5 text-sm text-slate-500">{empty}</p> : <div className="divide-y divide-slate-100">{records.map(record => <RecordRow key={record.id} entityType={entityType} record={record} queryId={queryId} />)}</div>}
+  </Card>;
+}
+
+const directionLabel: Record<string, string> = { ENTRADA: "Entrada", SAIDA: "Saída" };
+
+function TaxationByOperationSection({ groups, queryId }: { groups: TaxationOperationGroup[]; queryId: string }) {
+  const sorted = [...groups].sort((a, b) => (a.direction ?? "").localeCompare(b.direction ?? "") || a.profileLabel.localeCompare(b.profileLabel));
+  return <Card className="mt-5 overflow-hidden">
+    <div className="flex items-center gap-2 border-b border-slate-200 p-4"><Percent size={19} className="text-cyan-700" /><h2 className="font-bold text-slate-900">Tributação por operação (entrada/saída × UF)</h2><span className="ml-auto text-xs text-slate-500">{groups.length} tipo(s)</span></div>
+    {!sorted.length ? <p className="p-5 text-sm text-slate-500">Nenhuma regra de tributação por UF recebida.</p> : <div className="divide-y divide-slate-100">{sorted.map(group => <div key={group.code} className="p-5">
+      <div className="mb-3 flex flex-wrap items-center gap-2"><span className="rounded-full bg-cyan-50 px-2.5 py-1 text-xs font-semibold text-cyan-800">{group.direction ? directionLabel[group.direction] : "Direção desconhecida"}</span><strong className="text-sm text-slate-900">{group.profileLabel}</strong><code className="text-xs text-slate-400">{group.code}</code></div>
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-emerald-700">Mesma UF da empresa {!group.internal.length && "— nenhuma regra encontrada"}</p>
+      {group.internal.length > 0 && <div className="mb-4 divide-y divide-slate-100 rounded-lg border border-emerald-200">{group.internal.map(record => <RecordRow key={record.id} entityType="TAXATION_UF_V1" record={record} queryId={queryId} />)}</div>}
+      {group.interstate.length > 0 && <details><summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-slate-500">Outras UFs (exceções interestaduais) · {group.interstate.length}</summary><div className="mt-2 divide-y divide-slate-100 rounded-lg border border-slate-200">{group.interstate.map(record => <RecordRow key={record.id} entityType="TAXATION_UF_V1" record={record} queryId={queryId} />)}</div></details>}
+    </div>)}</div>}
   </Card>;
 }
 
