@@ -16,6 +16,7 @@ export const connectorQueriesService = {
   monitoring: async () => (await api.get<ApiResponse<ConnectorMonitoring>>("/connector-queries/monitoring")).data.data,
   create: async (data: Omit<ConnectorQuery, "id" | "version" | "sha256" | "enabled" | "syncWithConnector">) => (await api.post<ApiResponse<ConnectorQuery>>("/connector-queries", data)).data.data,
   setEnabled: async (id: string, enabled: boolean) => (await api.patch(`/connector-queries/${id}/enabled`, { enabled })).data,
+  remove: async (id: string) => (await api.delete<ApiResponse<{ id: string; code: string; version: number; deleted: boolean }>>(`/connector-queries/${id}`)).data.data,
   setSync: async (id: string, syncWithConnector: boolean) => (await api.patch(`/connector-queries/${id}/sync`, { syncWithConnector })).data,
   schedule: async (id: string, connectorId: string, companyId: string) => (await api.post<ApiResponse<unknown>>(`/connector-queries/${id}/jobs`, { connectorId, companyId, parameters: {} })).data.data,
   createRecurringSchedule: async (id: string, data: { connectorId: string; companyId: string; startAt: string; frequency: "DAILY" | "HOURLY" | "MINUTES"; intervalMinutes?: number }) => (await api.post<ApiResponse<ConnectorSchedule>>(`/connector-queries/${id}/schedules`, { ...data, parameters: {} })).data.data,
