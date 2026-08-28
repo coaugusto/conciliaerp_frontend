@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Barcode, Boxes, Database, Pencil, Percent, PackageSearch, Save, Truck, X } from "lucide-react";
+import { ArrowLeft, Barcode, Boxes, Database, FileText, Pencil, Percent, PackageSearch, Save, Truck, X } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader, SeverityBadge, dateTime } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
 import { fiscalComplianceService, type ImportedRecord, type TaxationOperationGroup } from "@/services/fiscal-compliance.service";
@@ -41,6 +41,7 @@ export default function InitialLoadProductDetailPage() {
     <RecordSection icon={<Percent size={19} className="text-cyan-700" />} title="Alíquotas padrão por UF" entityType="FAMILY_UF_DEFAULT_RATE_V1" records={data.taxation.defaultRates} empty="Nenhuma alíquota padrão recebida." queryId={id} />
     <RecordSection icon={<Database size={19} className="text-cyan-700" />} title="Embalagens" entityType="FAMILY_PACKAGING_V1" records={data.packaging} empty="Nenhuma embalagem recebida para esta família." queryId={id} />
     <RecordSection icon={<Truck size={19} className="text-cyan-700" />} title="Fornecedores" entityType="FAMILY_SUPPLIERS_V1" records={data.suppliers} empty="Nenhum fornecedor recebido para esta família." queryId={id} />
+    <RecordSection icon={<FileText size={19} className="text-cyan-700" />} title="Itens de nota fiscal (CST efetivamente declarado)" entityType="FISCAL_DOCUMENT_ITEMS_V1" records={data.documentItems} empty="Nenhum item de nota fiscal recebido ainda para este produto." queryId={id} />
 
     {data.family.relatedProducts.length > 0 && <Card className="mt-5 overflow-hidden"><div className="border-b border-slate-200 p-4"><h2 className="font-bold text-slate-900">Outros produtos da mesma família</h2></div><div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-sm"><thead><tr className="border-b text-xs uppercase text-slate-500"><th className="p-3">Produto</th><th className="p-3">NCM</th></tr></thead><tbody>{data.family.relatedProducts.map(related => <tr key={related.productId} className="border-b border-slate-100"><td className="p-3"><Link href={`/connector-data/initial-load/products/${encodeURIComponent(related.productId)}`} className="text-blue-700 hover:underline">{related.description || related.productId}</Link></td><td className="p-3">{related.ncm || "—"}</td></tr>)}</tbody></table></div></Card>}
   </>;
