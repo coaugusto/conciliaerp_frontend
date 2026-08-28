@@ -6,6 +6,7 @@ import { ArrowRight, Building2, Check, CheckCircle2, Download, Edit3, FileSpread
 import { Button, Card, ErrorState, PageHeader } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
 import { fiscalAlertsService, type FiscalAlertEntity, type FiscalAlertGroup, type FiscalAlertItem, type FiscalAlertSeverity, type FiscalSuggestionReference } from "@/services/fiscal-alerts.service";
+import { exportAlertsWorkbook } from "./export";
 
 const entityLabel:Record<FiscalAlertEntity,string>={PRODUCT:"Produtos",TAXATION:"Tributações",FAMILY:"Famílias",SUPPLIER:"Fornecedores",SPED:"SPED"};
 const severityLabel:Record<FiscalAlertSeverity,string>={CRITICAL:"Crítica",HIGH:"Alta",MEDIUM:"Média",LOW:"Baixa"};
@@ -14,6 +15,7 @@ const severityStyle:Record<FiscalAlertSeverity,string>={CRITICAL:"border-red-300
 export default function FiscalAlertsPage(){
   const alerts=useQuery({queryKey:["fiscal-alerts","summary"],queryFn:fiscalAlertsService.summary});
   const validation=useMutation({mutationFn:fiscalAlertsService.scanCatalog,onSuccess:async()=>{await alerts.refetch();}});
+  const exportWorkbook=useMutation({mutationFn:()=>exportAlertsWorkbook(alerts.data??[])});
   const [selectedId,setSelectedId]=useState<string>();
   const [entity,setEntity]=useState<FiscalAlertEntity|"ALL">("ALL");
   const [search,setSearch]=useState("");
@@ -21,7 +23,11 @@ export default function FiscalAlertsPage(){
   const selected=(alerts.data??[]).find(group=>group.id===selectedId)??visible[0];
   if(alerts.isError)return <><PageHeader title="Central de Alertas" description="Pendências cadastrais e fiscais do cliente."/><ErrorState/></>;
   return <>
-    <PageHeader title="Central de Alertas" description="Pendências identificadas nos produtos, tributações e cadastros do cliente." action={<Button onClick={()=>validation.mutate()} disabled={validation.isPending}>{validation.isPending?<LoaderCircle size={16} className="animate-spin"/>:<ShieldAlert size={16}/>} {validation.isPending?"Validando...":"Gerar alertas fiscais"}</Button>}/>
+    <PageHeader title="Central de Alertas" description="Pendências identificadas nos produtos, tributações e cadastros do cliente." action={<div className="flex flex-wrap items-center gap-2">
+      <Button variant="secondary" onClick={()=>exportWorkbook.mutate()} disabled={exportWorkbook.isPending||!alerts.data?.length}>{exportWorkbook.isPending?<LoaderCircle size={16} className="animate-spin"/>:<Download size={16}/>} {exportWorkbook.isPending?"Gerando planilha...":"Baixar"}</Button>
+      <Button onClick={()=>validation.mutate()} disabled={validation.isPending}>{validation.isPending?<LoaderCircle size={16} className="animate-spin"/>:<ShieldAlert size={16}/>} {validation.isPending?"Validando...":"Gerar alertas fiscais"}</Button>
+    </div>}/>
+    {exportWorkbook.isError&&<div role="alert" className="mb-5"><ErrorState message={getApiErrorMessage(exportWorkbook.error)}/></div>}
     {validation.isSuccess&&<div role="status" className="mb-5 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800"><CheckCircle2 size={17}/>Validação concluída. Os alertas persistidos foram atualizados.</div>}
     {validation.isError&&<div role="alert" className="mb-5"><ErrorState message={getApiErrorMessage(validation.error)}/></div>}
     <FiscalBatchActions/>
