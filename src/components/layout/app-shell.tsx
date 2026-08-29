@@ -31,7 +31,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, hydrated, logout, theme, toggleTheme } = useAuth();
   const tenants = useQuery({ queryKey: ["client-tenants"], queryFn: async () => (await api.get<ApiResponse<ClientTenant[]>>("/auth/tenants")).data.data, enabled: !!user });
   const [tenantId, setTenantId] = useState(() => typeof window === "undefined" ? "" : localStorage.getItem("concilia_tenant_id") ?? "");
-  const [tenantSearch, setTenantSearch] = useState(() => typeof window === "undefined" ? "" : `${localStorage.getItem("concilia_cnc_code") ?? ""}${localStorage.getItem("concilia_tenant_name") ? ` · ${localStorage.getItem("concilia_tenant_name")}` : ""}`);
+  // Sempre em branco ao carregar — o ambiente já selecionado continua ativo
+  // em segundo plano (tenantId acima), só o texto do campo não é pré-preenchido,
+  // forçando o usuário a digitar ou selecionar explicitamente para confirmar.
+  const [tenantSearch, setTenantSearch] = useState("");
   const [companyId, setCompanyId] = useState(() => typeof window === "undefined" ? "" : localStorage.getItem("concilia_company_id") ?? "");
   const clients = useQuery({ queryKey: ["client-context", tenantId], queryFn: clientContextService.list, enabled: !!user && !!tenantId });
   const [menuExpanded, setMenuExpanded] = useState(false);
