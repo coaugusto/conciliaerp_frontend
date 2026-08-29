@@ -1,7 +1,8 @@
 import { fiscalComplianceService, type FiscalProduct } from "@/services/fiscal-compliance.service";
 import type { FiscalAlertGroup } from "@/services/fiscal-alerts.service";
 
-type ColumnDef = { key: string; header: string; width: number; value: (product: FiscalProduct) => string };
+type ColumnDef = { key: string; header: string; width: number; value: (product: FiscalProduct, group: FiscalAlertGroup) => string };
+const moneyFormat = (value: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
 
 // Full cadastro row shown on every product-backed sheet, regardless of which
 // card is being exported — the ask was always the complete product record,
@@ -29,6 +30,9 @@ const PRODUCT_COLUMNS: ColumnDef[] = [
   { key: "taxationDifalRate", header: "Alíquota DIFAL", width: 14, value: p => p.taxation.difalRate ?? "" },
   { key: "defaultIcmsRate", header: "Alíquota ICMS padrão", width: 18, value: p => p.taxation.defaultIcmsRate ?? "" },
   { key: "operationProfile", header: "Perfil de operação", width: 26, value: p => p.taxation.operationProfile ?? "" },
+  // Só populada nas abas cuja regra calcula um valor (hoje, PIS_COFINS_CST_ALIQUOTA_ZERO_NCM) —
+  // fica em branco nas demais, sem poluir as outras abas.
+  { key: "estimatedOverpayment", header: "Valor pago a mais (estimado)", width: 24, value: (p, group) => { const value = p.findings.find(finding => finding.code === group.id)?.estimatedOverpayment; return value ? moneyFormat(value) : ""; } },
 ];
 
 // Which of the columns above hold the value that's actually wrong for a given
@@ -106,7 +110,7 @@ function buildProductSheet(sheet: import("exceljs").Worksheet, group: FiscalAler
   });
   headerRow.commit();
   for (const product of products) {
-    const row = sheet.addRow(Object.fromEntries(PRODUCT_COLUMNS.map(column => [column.key, column.value(product)])));
+    const row = sheet.addRow(Object.fromEntries(PRODUCT_COLUMNS.map(column => [column.key, column.value(product, group)])));
     PRODUCT_COLUMNS.forEach((column, index) => {
       if (!highlightKeys.has(column.key)) return;
       const cell = row.getCell(index + 1);
