@@ -29,22 +29,37 @@ function InitialLoadData() {
   const qc = useQueryClient();
   const [entityType, setEntityType] = useState<ExtractionType | "">("");
   const [page, setPage] = useState(1);
+  const [clearOpen, setClearOpen] = useState(false);
+  const [clearPassword, setClearPassword] = useState("");
+  const [clearReason, setClearReason] = useState("");
   const summary = useQuery({ queryKey: ["connector-data-summary"], queryFn: connectorDataService.summary });
   const list = useQuery({ queryKey: ["connector-data-list", entityType, page], queryFn: () => connectorDataService.list(entityType as ExtractionType, page, 50), enabled: Boolean(entityType) });
   const clearAll = useMutation({
-    mutationFn: connectorDataService.deleteTenantData,
-    onSuccess: async () => { setEntityType(""); setPage(1); await qc.invalidateQueries({ queryKey: ["connector-data-summary"] }); },
+    mutationFn: () => connectorDataService.deleteTenantData(clearPassword, clearReason.trim() || undefined),
+    onSuccess: async () => { setClearPassword(""); setClearOpen(false); setEntityType(""); setPage(1); await qc.invalidateQueries({ queryKey: ["connector-data-summary"] }); },
   });
   const totalRecords = summary.data?.reduce((sum, item) => sum + item.total, 0) ?? 0;
   return <>
     <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
       <p className="text-sm text-slate-500">Registros recebidos pelos jobs da carga inicial controlada (aba Connector do Portal do Cliente). Selecione uma consulta para ver os registros brutos importados.</p>
-      <Button variant="danger" disabled={clearAll.isPending || !totalRecords} onClick={() => { if (confirm(`Apagar definitivamente todos os ${totalRecords} registro(s) de carga inicial importados para este ambiente? Esta ação não pode ser desfeita — use apenas em ambiente de homologação para reiniciar a validação do zero.`)) clearAll.mutate(); }}>
+      <Button variant="danger" disabled={clearAll.isPending || !totalRecords} onClick={() => setClearOpen(true)}>
         {clearAll.isPending ? <LoaderCircle size={15} className="animate-spin" /> : <Trash2 size={15} />} Apagar todos os dados importados
       </Button>
     </div>
-    {clearAll.isError && <div className="mb-4"><ErrorState message={getApiErrorMessage(clearAll.error)} /></div>}
-    {clearAll.isSuccess && <p role="status" className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">{clearAll.data.deletedRecords} registro(s) e {clearAll.data.deletedCorrections} correção(ões) manual(is) apagados. Rode uma nova carga inicial pelo Connector para repovoar.</p>}
+    {clearOpen && <div className="mb-4 rounded-lg border border-red-200 bg-red-50 p-4">
+      <p className="text-sm font-semibold text-red-800">Apagar todos os dados importados deste ambiente ({totalRecords} registro(s))</p>
+      <p className="mt-1 text-sm text-red-700">Isso apaga os registros de carga inicial (todas as consultas), o histórico de jobs/lotes do Connector, zera o status das cargas iniciais e limpa a fila pendente de <code>/catalog-review</code> deste tenant. Não afeta outros clientes nem o catálogo central compartilhado. Use apenas em ambiente de homologação para reiniciar a validação do zero.</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <label className="text-sm font-semibold text-red-800">Sua senha de login<input type="password" value={clearPassword} onChange={event => setClearPassword(event.target.value)} className="mt-1.5 h-10 w-full rounded-md border border-red-300 bg-white px-3 text-sm font-normal" autoComplete="current-password" /></label>
+        <label className="text-sm font-semibold text-red-800">Motivo (opcional)<input value={clearReason} onChange={event => setClearReason(event.target.value)} className="mt-1.5 h-10 w-full rounded-md border border-red-300 bg-white px-3 text-sm font-normal" placeholder="Ex.: reiniciar validação após novas colunas na extração" /></label>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-3">
+        <Button variant="danger" onClick={() => clearAll.mutate()} disabled={!clearPassword || clearAll.isPending}>{clearAll.isPending ? "Apagando..." : "Confirmar exclusão"}</Button>
+        <Button variant="secondary" onClick={() => { setClearOpen(false); setClearPassword(""); setClearReason(""); }} disabled={clearAll.isPending}>Cancelar</Button>
+      </div>
+      {clearAll.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(clearAll.error)} /></div>}
+    </div>}
+    {clearAll.isSuccess && <p role="status" className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Apagado: {clearAll.data.deletedRecords} registro(s), {clearAll.data.deletedCorrections} correção(ões) manual(is), {clearAll.data.deletedJobs} job(s), {clearAll.data.deletedBatches} lote(s), {clearAll.data.resetLoads} carga(s) inicial(is) zerada(s) e {clearAll.data.deletedCatalogApprovals} pendência(s) em /catalog-review. Rode uma nova carga inicial pelo Connector para repovoar.</p>}
     {summary.isError ? <ErrorState message="Não foi possível carregar o resumo da carga inicial." /> : <InitialLoadSummaryCards summary={summary.data} loading={summary.isLoading} selected={entityType} select={(value) => { setEntityType(value); setPage(1); }} />}
     {entityType && (list.isError ? <ErrorState message="Não foi possível carregar os registros desta consulta." /> : <InitialLoadRecordsTable entityType={entityType} data={list.data} loading={list.isLoading} page={page} setPage={setPage} />)}
   </>;
