@@ -9,4 +9,5 @@ export const fiscalComplianceService = {
   products: async () => (await api.get<ApiResponse<{ requiresCompanySelection: boolean; client: { name: string; documentRoot: string; state: string | null; branches: number } | null; items: FiscalProduct[] }>>("/fiscal-compliance/products")).data.data,
   product: async (id: string) => (await api.get<ApiResponse<FiscalProductDetail>>(`/fiscal-compliance/products/${id}`)).data.data,
   correct: async (id: string, payload: Record<string, unknown>) => (await api.patch<ApiResponse<ImportedRecord>>(`/fiscal-compliance/imported-records/${id}`, { payload })).data.data,
+  bulkCorrect: async (rows: { productId: string; payload: Record<string, unknown> }[]) => (await api.post<ApiResponse<{ updated: number; notFound: string[]; skipped: number }>>("/fiscal-compliance/imported-records/bulk-correct", { rows })).data.data,
 };

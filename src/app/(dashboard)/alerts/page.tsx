@@ -2,20 +2,32 @@
 import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowRight, Building2, Check, CheckCircle2, Download, Edit3, FileSpreadsheet, FileWarning, Info, Layers3, LoaderCircle, PackageSearch, Search, Send, ShieldAlert, Upload, X } from "lucide-react";
+import { ArrowRight, Building2, Check, CheckCircle2, Download, Edit3, FileWarning, Info, Layers3, LoaderCircle, PackageSearch, Search, Send, ShieldAlert, Upload, X } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
+import { fiscalComplianceService } from "@/services/fiscal-compliance.service";
 import { fiscalAlertsService, type FiscalAlertEntity, type FiscalAlertGroup, type FiscalAlertItem, type FiscalAlertSeverity, type FiscalSuggestionReference } from "@/services/fiscal-alerts.service";
 import { exportAlertsWorkbook } from "./export";
+import { readAlertsWorkbook } from "./import";
 
 const entityLabel:Record<FiscalAlertEntity,string>={PRODUCT:"Produtos",TAXATION:"Tributações",FAMILY:"Famílias",SUPPLIER:"Fornecedores",SPED:"SPED"};
 const severityLabel:Record<FiscalAlertSeverity,string>={CRITICAL:"Crítica",HIGH:"Alta",MEDIUM:"Média",LOW:"Baixa"};
 const severityStyle:Record<FiscalAlertSeverity,string>={CRITICAL:"border-red-300 bg-red-50 text-red-800",HIGH:"border-orange-300 bg-orange-50 text-orange-800",MEDIUM:"border-amber-300 bg-amber-50 text-amber-800",LOW:"border-blue-300 bg-blue-50 text-blue-800"};
 
 export default function FiscalAlertsPage(){
+  const importInput=useRef<HTMLInputElement>(null);
   const alerts=useQuery({queryKey:["fiscal-alerts","summary"],queryFn:fiscalAlertsService.summary});
   const validation=useMutation({mutationFn:fiscalAlertsService.scanCatalog,onSuccess:async()=>{await alerts.refetch();}});
   const exportWorkbook=useMutation({mutationFn:()=>exportAlertsWorkbook(alerts.data??[])});
+  const importWorkbook=useMutation({
+    mutationFn:async(file:File)=>{
+      const {rows,sheetsRead,sheetsSkipped}=await readAlertsWorkbook(file);
+      if(!rows.length)throw new Error(sheetsRead.length?"Nenhuma linha com correção preenchida foi encontrada nas abas lidas.":"Nenhuma aba com o layout do \"Baixar\" foi encontrada neste arquivo.");
+      if(!confirm(`${rows.length} produto(s) serão corrigidos no cadastro a partir de ${sheetsRead.length} aba(s)${sheetsSkipped.length?` (${sheetsSkipped.length} aba(s) ignorada(s), sem o layout esperado)`:""}. Confirmar importação?`))throw new Error("__cancelled__");
+      return fiscalComplianceService.bulkCorrect(rows);
+    },
+    onSuccess:async()=>{await alerts.refetch();},
+  });
   const [selectedId,setSelectedId]=useState<string>();
   const [entity,setEntity]=useState<FiscalAlertEntity|"ALL">("ALL");
   const [search,setSearch]=useState("");
@@ -25,12 +37,15 @@ export default function FiscalAlertsPage(){
   return <>
     <PageHeader title="Central de Alertas" description="Pendências identificadas nos produtos, tributações e cadastros do cliente." action={<div className="flex flex-wrap items-center gap-2">
       <Button variant="secondary" onClick={()=>exportWorkbook.mutate()} disabled={exportWorkbook.isPending||!alerts.data?.length}>{exportWorkbook.isPending?<LoaderCircle size={16} className="animate-spin"/>:<Download size={16}/>} {exportWorkbook.isPending?"Gerando planilha...":"Baixar"}</Button>
+      <input ref={importInput} type="file" accept=".xlsx,.xls" className="hidden" onChange={event=>{const file=event.target.files?.[0];event.target.value="";if(file)importWorkbook.mutate(file);}}/>
+      <Button variant="secondary" onClick={()=>importInput.current?.click()} disabled={importWorkbook.isPending}>{importWorkbook.isPending?<LoaderCircle size={16} className="animate-spin"/>:<Upload size={16}/>} {importWorkbook.isPending?"Importando...":"Importar"}</Button>
       <Button onClick={()=>validation.mutate()} disabled={validation.isPending}>{validation.isPending?<LoaderCircle size={16} className="animate-spin"/>:<ShieldAlert size={16}/>} {validation.isPending?"Validando...":"Gerar alertas fiscais"}</Button>
     </div>}/>
     {exportWorkbook.isError&&<div role="alert" className="mb-5"><ErrorState message={getApiErrorMessage(exportWorkbook.error)}/></div>}
+    {importWorkbook.isError&&getApiErrorMessage(importWorkbook.error)!=="__cancelled__"&&<div role="alert" className="mb-5"><ErrorState message={getApiErrorMessage(importWorkbook.error)}/></div>}
+    {importWorkbook.isSuccess&&<div role="status" className="mb-5 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800"><CheckCircle2 size={17}/>{importWorkbook.data.updated} produto(s) corrigido(s).{importWorkbook.data.notFound.length>0&&` ${importWorkbook.data.notFound.length} código(s) não encontrado(s) no cadastro atual.`}{importWorkbook.data.skipped>0&&` ${importWorkbook.data.skipped} linha(s) sem alteração a aplicar.`}</div>}
     {validation.isSuccess&&<div role="status" className="mb-5 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800"><CheckCircle2 size={17}/>Validação concluída. Os alertas persistidos foram atualizados.</div>}
     {validation.isError&&<div role="alert" className="mb-5"><ErrorState message={getApiErrorMessage(validation.error)}/></div>}
-    <FiscalBatchActions/>
     <div className="mb-5 flex max-w-5xl flex-wrap gap-2">{(["ALL","PRODUCT","TAXATION","SPED","FAMILY","SUPPLIER"] as const).map(value=><Button key={value} variant={entity===value?"primary":"secondary"} onClick={()=>{setEntity(value);setSelectedId(undefined);}}>{value==="ALL"?"Todas":entityLabel[value]}</Button>)}</div>
     {alerts.isLoading?<LoadingCards/>:<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{visible.map(group=><AlertCard key={group.id} group={group} selected={selected?.id===group.id} select={()=>setSelectedId(group.id)}/>)}</div>}
     {selected&&<Card className="mt-6 overflow-visible">
@@ -40,7 +55,6 @@ export default function FiscalAlertsPage(){
   </>;
 }
 
-function FiscalBatchActions(){const input=useRef<HTMLInputElement>(null);const [batch,setBatch]=useState<Awaited<ReturnType<typeof fiscalAlertsService.importCorrections>>>();const [message,setMessage]=useState("");const exportData=async(format:"xlsx"|"csv")=>{const rows=await fiscalAlertsService.correctionRows();if(!rows.length){setMessage("Nenhuma proposta fiscal disponível para exportação. Este De/Para é gerado pelo botão \"Gerar alertas fiscais\" acima — execute-o primeiro. Para baixar os cadastros com pendência exibidos nos cartões abaixo, use o botão \"Baixar\" no topo da página.");return;}const XLSX=await import("xlsx");const sheet=XLSX.utils.json_to_sheet(rows);if(format==="xlsx"){const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,sheet,"De-Para Fiscal");XLSX.writeFile(book,"de-para-fiscal.xlsx");}else{const csv=XLSX.utils.sheet_to_csv(sheet,{FS:";"});const url=URL.createObjectURL(new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"}));const link=document.createElement("a");link.href=url;link.download="de-para-fiscal.csv";link.click();URL.revokeObjectURL(url);}setMessage(`${rows.length} produto(s) exportado(s).`);};const importFile=async(file?:File)=>{if(!file)return;const XLSX=await import("xlsx");const book=XLSX.read(await file.arrayBuffer(),{type:"array"});const sheet=book.Sheets[book.SheetNames[0]];const rows=XLSX.utils.sheet_to_json<Record<string,string|number|null>>(sheet,{defval:""});const result=await fiscalAlertsService.importCorrections(rows,file.name);setBatch(result);setMessage(result.validationRate===100?"Planilha 100% validada. A atualização do ERP foi liberada.":`${result.invalidRows} linha(s) possuem erros; corrija e importe novamente.`);};const queue=useMutation({mutationFn:()=>fiscalAlertsService.queueCorrectionBatch(batch!.id),onSuccess:data=>{setMessage(`${data.queued} atualização(ões) enviadas para a fila da API do ERP.`);setBatch(previous=>previous?{...previous,status:"QUEUED_FOR_ERP"}:previous);}});return <Card className="mb-5 flex max-w-6xl flex-wrap items-center gap-2 p-4"><span className="mr-auto flex items-center gap-2 text-sm font-semibold text-slate-700"><FileSpreadsheet size={18} className="text-cyan-700"/>De/Para fiscal dos produtos importados</span><Button variant="secondary" onClick={()=>void exportData("xlsx")}><Download size={16}/>Excel</Button><Button variant="secondary" onClick={()=>void exportData("csv")}><Download size={16}/>CSV ;</Button><input ref={input} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={event=>void importFile(event.target.files?.[0])}/><Button variant="secondary" onClick={()=>input.current?.click()}><Upload size={16}/>Importar e validar</Button>{batch?.validationRate===100&&batch.status!=="QUEUED_FOR_ERP"&&<Button onClick={()=>queue.mutate()} disabled={queue.isPending}><Send size={16}/>Atualizar ERP via API</Button>}{message&&<p className={`w-full text-sm ${batch&&batch.validationRate<100?"text-red-700":"text-emerald-700"}`}>{message}</p>}{batch?.errors.slice(0,5).map(error=><p key={error.rowNumber} className="w-full text-xs text-red-700">Linha {error.rowNumber}: {error.errors.join("; ")}</p>)}</Card>}
 function LoadingCards(){return <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{[1,2,3].map(item=><div key={item} className="h-40 animate-pulse rounded-xl bg-slate-100"/>)}</div>}
 function AlertCard({group,selected,select}:{group:FiscalAlertGroup;selected:boolean;select:()=>void}){return <button type="button" onClick={select} className="text-left"><Card className={`h-full p-5 transition hover:-translate-y-0.5 hover:border-cyan-400 hover:shadow-md ${selected?"border-cyan-600 ring-2 ring-cyan-100":""}`}><div className="flex items-start justify-between gap-3"><span className="grid size-10 place-items-center rounded-lg bg-cyan-50 text-cyan-700"><EntityIcon entity={group.entity}/></span><span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${severityStyle[group.severity]}`}>{severityLabel[group.severity]}</span></div><strong className="mt-4 block text-slate-900">{group.title}</strong><p className="mt-1 min-h-10 text-sm text-slate-500">{group.description}</p><div className="mt-4 flex items-end justify-between"><span><b className="block text-2xl text-slate-900">{group.affected}</b><small className="text-slate-500">registros afetados</small></span><span className="text-xs font-semibold text-cyan-700">Ver De/Para →</span></div></Card></button>}
 function AlertItems({group,search}:{group:FiscalAlertGroup;search:string}){
