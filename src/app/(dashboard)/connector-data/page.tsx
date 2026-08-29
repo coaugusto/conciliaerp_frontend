@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { Braces, Database, Eye, FileText } from "lucide-react";
+import { Braces, Database, Eye, FileText, LoaderCircle, Trash2 } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader } from "@/components/shared/ui";
+import { getApiErrorMessage } from "@/services/api/client";
 import { connectorTransmissionsService, type ConnectorTransmission, type TransmissionPage, type TransmissionSummary, type ValidatedProduct } from "@/services/connector-transmissions.service";
 import { connectorDataService, extractionTypes, type ExtractionPage, type ExtractionSummary, type ExtractionType } from "@/services/connector-data.service";
 
@@ -25,12 +26,25 @@ export default function ConnectorDataPage() {
 }
 
 function InitialLoadData() {
+  const qc = useQueryClient();
   const [entityType, setEntityType] = useState<ExtractionType | "">("");
   const [page, setPage] = useState(1);
   const summary = useQuery({ queryKey: ["connector-data-summary"], queryFn: connectorDataService.summary });
   const list = useQuery({ queryKey: ["connector-data-list", entityType, page], queryFn: () => connectorDataService.list(entityType as ExtractionType, page, 50), enabled: Boolean(entityType) });
+  const clearAll = useMutation({
+    mutationFn: connectorDataService.deleteTenantData,
+    onSuccess: async () => { setEntityType(""); setPage(1); await qc.invalidateQueries({ queryKey: ["connector-data-summary"] }); },
+  });
+  const totalRecords = summary.data?.reduce((sum, item) => sum + item.total, 0) ?? 0;
   return <>
-    <p className="mb-4 text-sm text-slate-500">Registros recebidos pelos jobs da carga inicial controlada (aba Connector do Portal do Cliente). Selecione uma consulta para ver os registros brutos importados.</p>
+    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+      <p className="text-sm text-slate-500">Registros recebidos pelos jobs da carga inicial controlada (aba Connector do Portal do Cliente). Selecione uma consulta para ver os registros brutos importados.</p>
+      <Button variant="danger" disabled={clearAll.isPending || !totalRecords} onClick={() => { if (confirm(`Apagar definitivamente todos os ${totalRecords} registro(s) de carga inicial importados para este ambiente? Esta ação não pode ser desfeita — use apenas em ambiente de homologação para reiniciar a validação do zero.`)) clearAll.mutate(); }}>
+        {clearAll.isPending ? <LoaderCircle size={15} className="animate-spin" /> : <Trash2 size={15} />} Apagar todos os dados importados
+      </Button>
+    </div>
+    {clearAll.isError && <div className="mb-4"><ErrorState message={getApiErrorMessage(clearAll.error)} /></div>}
+    {clearAll.isSuccess && <p role="status" className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">{clearAll.data.deletedRecords} registro(s) e {clearAll.data.deletedCorrections} correção(ões) manual(is) apagados. Rode uma nova carga inicial pelo Connector para repovoar.</p>}
     {summary.isError ? <ErrorState message="Não foi possível carregar o resumo da carga inicial." /> : <InitialLoadSummaryCards summary={summary.data} loading={summary.isLoading} selected={entityType} select={(value) => { setEntityType(value); setPage(1); }} />}
     {entityType && (list.isError ? <ErrorState message="Não foi possível carregar os registros desta consulta." /> : <InitialLoadRecordsTable entityType={entityType} data={list.data} loading={list.isLoading} page={page} setPage={setPage} />)}
   </>;
