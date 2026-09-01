@@ -45,6 +45,7 @@ const HIGHLIGHT_COLUMNS_BY_FINDING: Record<string, string[]> = {
   TAXATION_UF_MISSING: ["family", "taxationCstIcms"],
   TAXATION_UF_INTERNAL_MISSING: ["taxationCstIcms", "taxationIcmsRate", "operationProfile"],
   PIS_COFINS_CST_ALIQUOTA_ZERO_NCM: ["ncm", "taxationPisCst", "taxationCofinsCst"],
+  ICMS_CST_CADASTRO_DIVERGENCE: ["taxationCstIcms"],
 };
 
 const HEADER_FILL = { type: "pattern" as const, pattern: "solid" as const, fgColor: { argb: "FF075D70" } };
