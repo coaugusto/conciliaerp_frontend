@@ -8,6 +8,7 @@ import {
   Eye,
   FileCheck2,
   FileSpreadsheet,
+  FolderTree,
   PackageCheck,
   ShieldCheck,
   Sparkles,
@@ -164,6 +165,7 @@ export default function Marketplace() {
       <PageHeader
         title="Catálogo Central"
         description="Produtos globais aprovados e fluxo de carga inicial para análise externa."
+        action={<Link href="/marketplace/categories" className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700"><FolderTree size={16} />Categorias</Link>}
       />
       <InitialLoadCard
         candidates={candidates.data?.length ?? 0}

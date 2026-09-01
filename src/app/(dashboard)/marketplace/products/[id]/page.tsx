@@ -12,7 +12,14 @@ import { masterCatalogService, type MasterCatalogProductChanges, type MasterCata
 
 const taxationStatusLabels: Record<MasterCatalogTaxationStatus, string> = { MISSING: "Sem tributação", NEW: "Nova do cadastro", REUSED: "Reaproveitada", NEEDS_CONFIRMATION: "Aguardando confirmação" };
 const taxationStatusTone: Record<MasterCatalogTaxationStatus, string> = { MISSING: "bg-amber-100 text-amber-800", NEW: "bg-slate-100 text-slate-700", REUSED: "bg-emerald-100 text-emerald-800", NEEDS_CONFIRMATION: "bg-violet-100 text-violet-800" };
-const linkSourceLabels: Record<MasterCatalogTaxationProfile["linkSource"], string> = { FROM_CADASTRO: "Do cadastro importado", REUSED_EXISTING: "Reaproveitada de outro produto", MANUAL: "Cadastrada manualmente" };
+const linkSourceLabels: Record<MasterCatalogTaxationProfile["linkSource"], string> = { FROM_CADASTRO: "Do cadastro importado", REUSED_EXISTING: "Reaproveitada de outro produto", MANUAL: "Cadastrada manualmente", AI_SUGGESTED: "Sugerida (IA/similaridade)" };
+// Mesma classificação já usada em backend/src/fiscal-compliance/fiscal-compliance.service.ts
+// (MAP_TRIBUTACAOUF.tiptributacao) — 1º caractere é direção (E=entrada, S=saída), 2º é o perfil
+// da contraparte. É por isso que UF origem→destino repete na tabela sem as abas: cada linha é um
+// TIPO de operação diferente para o mesmo par de UF (ex.: entrada de indústria × entrada de
+// distribuidor), não um dado duplicado.
+const TAXATION_TYPE_LABELS: Record<string, string> = { EI: "Entrada · Indústria", ED: "Entrada · Distribuidor", EM: "Entrada · Microempresa (Simples Nacional)", SC: "Saída · Contribuinte", SN: "Saída · Não contribuinte", SM: "Saída · Microempresa (Simples Nacional)", SI: "Saída · Indústria", SD: "Saída · Distribuidor" };
+const taxationTypeLabel = (code: string | null) => (code && TAXATION_TYPE_LABELS[code]) || (code ? `Tipo não mapeado (${code})` : "Tipo não informado");
 
 const editableFields: { key: keyof MasterCatalogProductChanges; label: string; type?: "number" }[] = [
   { key: "canonicalDescription", label: "Descrição canônica" }, { key: "originalDescription", label: "Descrição original" }, { key: "shortDescription", label: "Descrição curta" },
@@ -60,7 +67,16 @@ export default function MasterCatalogProductDetailPage() {
       {save.isError && <div className="border-b border-slate-200 p-4"><ErrorState message={getApiErrorMessage(save.error)} /></div>}
       {editing
         ? <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">{editableFields.map(({ key, label, type }) => <label key={key} className="grid gap-1 text-sm font-medium text-slate-700">{label}<input type={type ?? "text"} value={draft[key] ?? ""} onChange={(event) => setDraft({ ...draft, [key]: event.target.value })} className="h-9 rounded-md border border-slate-300 px-2 font-normal text-slate-800" /></label>)}</div>
-        : <dl className="grid gap-x-5 sm:grid-cols-2">{editableFields.map(({ key, label }) => <div key={key} className="border-b border-slate-100 p-4"><dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt><dd className="mt-1 text-sm font-medium text-slate-800">{item[key] || "Não informado"}</dd></div>)}</dl>}
+        : <dl className="grid gap-x-5 sm:grid-cols-2">
+            {editableFields.filter(({ key }) => !(item.categoryNodeId && (key === "category" || key === "subcategory"))).map(({ key, label }) => <div key={key} className="border-b border-slate-100 p-4"><dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</dt><dd className="mt-1 text-sm font-medium text-slate-800">{item[key] || "Não informado"}</dd></div>)}
+            {item.categoryNodeId && !!item.categoryPath?.length && (
+              <div className="border-b border-slate-100 p-4 sm:col-span-2">
+                <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">Categoria</dt>
+                <dd className="mt-1 text-sm font-medium text-slate-800">{item.categoryPath[item.categoryPath.length - 1].name}</dd>
+                <dd className="mt-0.5 text-xs text-slate-400">{item.categoryPath.map((node) => node.name).join(" › ")}</dd>
+              </div>
+            )}
+          </dl>}
     </Card>
 
     <Card className="mt-5 overflow-hidden">
@@ -71,27 +87,48 @@ export default function MasterCatalogProductDetailPage() {
       {!item.taxation.profiles.length ? (
         <p className="p-5 text-sm text-slate-500">{item.taxation.otherTenantHasTaxation ? "Nenhuma tributação registrada pelo seu cliente para este produto (outro cliente já possui)." : "Nenhuma tributação registrada para este produto."}</p>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="p-3">Nome</th><th className="p-3">UF origem → destino</th><th className="p-3">CST ICMS/IPI/PIS/COFINS</th><th className="p-3">CFOP</th><th className="p-3">ICMS / ST / MVA</th><th className="p-3">FCP / DIFAL</th><th className="p-3">Origem</th></tr></thead>
-            <tbody>
-              {item.taxation.profiles.map((profile) => <tr key={profile.id} className="border-t border-slate-100">
-                <td className="p-3 font-medium">{profile.name ?? "—"}</td>
-                <td className="p-3">{profile.companyState} → {profile.counterpartyState}</td>
-                <td className="p-3 font-mono text-xs">{profile.cstIcms ?? "—"} / {profile.cstIpi ?? "—"} / {profile.cstPis ?? "—"} / {profile.cstCofins ?? "—"}</td>
-                <td className="p-3">{profile.cfop ?? "—"}</td>
-                <td className="p-3">{profile.icmsRate ?? "—"}% / {profile.icmsStRate ?? "—"}% / {profile.icmsStMvaPct ?? "—"}%</td>
-                <td className="p-3">{profile.fcpRate ?? "—"}% / {profile.difalRate ?? "—"}%</td>
-                <td className="p-3 text-xs text-slate-500">{linkSourceLabels[profile.linkSource]}</td>
-              </tr>)}
-            </tbody>
-          </table>
-        </div>
+        <TaxationProfilesTable profiles={item.taxation.profiles} />
       )}
       {isAdmin && item.taxation.status === "MISSING" && <TaxationSuggestions productId={productId} onAccept={refresh} />}
       {isAdmin && <TaxationLinkPicker linkedIds={item.taxation.profiles.map((profile) => profile.id)} onLink={(taxationId) => linkTaxation.mutate(taxationId)} linking={linkTaxation.isPending} error={linkTaxation.error} />}
     </Card>
   </>;
+}
+
+function TaxationProfilesTable({ profiles }: { profiles: MasterCatalogTaxationProfile[] }) {
+  const [activeType, setActiveType] = useState<string | null>(null);
+  const types = [...new Set(profiles.map((profile) => profile.taxationType ?? ""))].sort((a, b) => taxationTypeLabel(a || null).localeCompare(taxationTypeLabel(b || null)));
+  const visible = activeType === null ? profiles : profiles.filter((profile) => (profile.taxationType ?? "") === activeType);
+  return (
+    <>
+      {types.length > 1 && (
+        <div role="tablist" aria-label="Tipo de operação" className="flex flex-wrap gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 p-2">
+          <button role="tab" aria-selected={activeType === null} onClick={() => setActiveType(null)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${activeType === null ? "bg-white text-cyan-800 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`}>Todos ({profiles.length})</button>
+          {types.map((type) => {
+            const count = profiles.filter((profile) => (profile.taxationType ?? "") === type).length;
+            return <button key={type || "sem-tipo"} role="tab" aria-selected={activeType === type} onClick={() => setActiveType(type)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${activeType === type ? "bg-white text-cyan-800 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`}>{taxationTypeLabel(type || null)} ({count})</button>;
+          })}
+        </div>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[1080px] text-left text-sm">
+          <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="p-3">Nome</th><th className="p-3">Tipo</th><th className="p-3">UF origem → destino</th><th className="p-3">CST ICMS/IPI/PIS/COFINS</th><th className="p-3">CFOP</th><th className="p-3">ICMS / ST / MVA</th><th className="p-3">FCP / DIFAL</th><th className="p-3">Origem</th></tr></thead>
+          <tbody>
+            {visible.map((profile) => <tr key={profile.id} className="border-t border-slate-100">
+              <td className="p-3 font-medium">{profile.name ?? "—"}</td>
+              <td className="p-3 text-xs text-slate-600">{taxationTypeLabel(profile.taxationType)}</td>
+              <td className="p-3">{profile.companyState} → {profile.counterpartyState}</td>
+              <td className="p-3 font-mono text-xs">{profile.cstIcms ?? "—"} / {profile.cstIpi ?? "—"} / {profile.cstPis ?? "—"} / {profile.cstCofins ?? "—"}</td>
+              <td className="p-3">{profile.cfop ?? "—"}</td>
+              <td className="p-3">{profile.icmsRate ?? "—"}% / {profile.icmsStRate ?? "—"}% / {profile.icmsStMvaPct ?? "—"}%</td>
+              <td className="p-3">{profile.fcpRate ?? "—"}% / {profile.difalRate ?? "—"}%</td>
+              <td className="p-3 text-xs text-slate-500">{linkSourceLabels[profile.linkSource]}</td>
+            </tr>)}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
 }
 
 function TaxationSuggestions({ productId, onAccept }: { productId: string; onAccept: () => void }) {

@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { Braces, Database, Eye, FileText, LoaderCircle, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Braces, Database, Eye, FileText, LoaderCircle, Sparkles, Trash2 } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
-import { connectorTransmissionsService, type ConnectorTransmission, type TransmissionPage, type TransmissionSummary, type ValidatedProduct } from "@/services/connector-transmissions.service";
+import { connectorTransmissionsService, type ConnectorTransmission, type FieldSuggestion, type TransmissionPage, type TransmissionSummary, type ValidatedProduct } from "@/services/connector-transmissions.service";
 import { connectorDataService, extractionTypes, type ExtractionPage, type ExtractionSummary, type ExtractionType } from "@/services/connector-data.service";
 
 const issueLabels: Record<string, string> = { all: "Todos os itens", ok: "Itens sem pendência", ncm: "Itens com NCM pendente", cest: "Itens com CEST pendente", cst: "Itens com CST ICMS pendente", cfop: "Itens com CFOP pendente" };
@@ -170,7 +170,66 @@ function DataFilters({origin,queryCode,setOrigin,setQueryCode}:{origin:OriginFil
   return <Card className="mb-5 grid gap-4 p-4 xl:grid-cols-[1fr_auto]"><div><b className="text-sm text-slate-800">Base de extração</b><p className="mt-1 text-xs text-slate-500">Os indicadores e registros abaixo seguem os filtros selecionados.</p><div className="mt-3 flex flex-wrap gap-2" role="group" aria-label="Filtrar dados por base de extração">{(["ALL","API","SPED"] as const).map(value=><Button key={value} variant={origin===value?"primary":"secondary"} aria-pressed={origin===value} onClick={()=>setOrigin(value)}>{value==="API"?<Braces size={15}/>:value==="SPED"?<FileText size={15}/>:null}{value==="ALL"?"Todas as origens":value==="API"?"Via API":"Arquivo SPED"}</Button>)}</div></div><label className="grid min-w-72 content-end gap-1 text-sm font-semibold text-slate-700">Consulta / tipo de dado<select value={queryCode} onChange={event=>setQueryCode(event.target.value as QueryFilter)} className="h-9 rounded-md border border-slate-300 bg-white px-3 font-normal outline-none focus:border-cyan-600"><option value="ALL">Todas as consultas</option>{extractionTypes.map(([code,label])=><option key={code} value={code}>{label} · {code}</option>)}</select></label></Card>;
 }
 
-function SpedProposals({ items, total }: { items: Awaited<ReturnType<typeof connectorTransmissionsService.spedProposals>>["items"]; total: number }) { return <Card className="mb-5 overflow-hidden"><div className="border-b p-4"><b className="text-slate-800">Propostas fiscais geradas do SPED</b><span className="ml-2 text-sm text-slate-500">{total} pendente(s) de revisão</span></div><div className="overflow-x-auto"><table className="w-full min-w-[800px] text-sm"><thead><tr className="bg-slate-50 text-xs uppercase text-slate-500"><th className="p-3 text-left">Produto / família sugerida</th><th className="p-3 text-left">NCM / CEST</th><th className="p-3 text-left">CST / CFOP observados</th><th className="p-3 text-left">Alíquota efetiva</th><th className="p-3 text-left">Regras</th></tr></thead><tbody>{items.map(item => <tr key={item.id} className="border-t border-slate-100"><td className="p-3"><b className="block">{item.canonicalDescription}</b><small className="text-slate-500">{item.productCode} · {item.familyName || item.familyKey || "Família a definir"}</small></td><td className="p-3">{item.ncm || "—"} / {item.cest || "—"}</td><td className="p-3">{item.taxation.cstIcms || "—"} / {item.taxation.cfop || "—"}</td><td className="p-3">ICMS {item.evidence.effectiveIcmsRate ?? "—"}% · IPI {item.evidence.effectiveIpiRate ?? "—"}%</td><td className="p-3">{item.validation.error ? "Validação indisponível" : `${item.validation.standard?.matchedRules?.length ?? 0} regra(s) encontrada(s)`}</td></tr>)}</tbody></table></div></Card>; }
+const suggestionSourceMeta: Record<string, { label: string; className: string }> = {
+  CONFAZ_TABLE: { label: "Lei", className: "bg-blue-100 text-blue-800" },
+  CATALOG_REUSE: { label: "Reaproveitado", className: "bg-emerald-100 text-emerald-800" },
+  SIMILARITY_MATCH: { label: "Parecido", className: "bg-amber-100 text-amber-800" },
+  AI_ASSISTED: { label: "IA", className: "bg-violet-100 text-violet-800" },
+};
+function SuggestionBadge({ suggestion }: { suggestion?: FieldSuggestion }) {
+  if (!suggestion) return null;
+  const meta = suggestionSourceMeta[suggestion.source] ?? { label: suggestion.source, className: "bg-slate-100 text-slate-700" };
+  return <span title={suggestion.rationale} className={`ml-1.5 inline-flex shrink-0 items-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${meta.className}`}>{meta.label} · {Math.round(suggestion.confidence * 100)}%</span>;
+}
+function FieldWithSuggestion({ current, suggestion }: { current: string | number | null | undefined; suggestion?: FieldSuggestion }) {
+  if (current !== null && current !== undefined && current !== "") return <>{current}</>;
+  if (!suggestion) return <>—</>;
+  return <span className="inline-flex flex-wrap items-center">— <span className="ml-1 font-semibold text-slate-800">→ {suggestion.suggestedValue}</span><SuggestionBadge suggestion={suggestion} /></span>;
+}
+
+function SpedProposals({ items, total }: { items: Awaited<ReturnType<typeof connectorTransmissionsService.spedProposals>>["items"]; total: number }) {
+  const qc = useQueryClient();
+  const [jobId, setJobId] = useState<string | null>(null);
+  const pendingReviewCount = items.reduce((sum, item) => sum + (item.evidence.pendingAiReview?.length ?? 0), 0);
+  const trigger = useMutation({
+    mutationFn: () => connectorTransmissionsService.startAiSuggestions(),
+    onSuccess: (data) => setJobId(data.jobId),
+  });
+  const status = useQuery({
+    queryKey: ["ai-fiscal-suggestions-status", jobId],
+    queryFn: () => connectorTransmissionsService.aiSuggestionsStatus(jobId!),
+    enabled: Boolean(jobId),
+    refetchInterval: (query) => (query.state.data && !["SUCCEEDED", "FAILED"].includes(query.state.data.status) ? 2000 : false),
+  });
+  const finished = Boolean(status.data && ["SUCCEEDED", "FAILED"].includes(status.data.status));
+  const running = Boolean(jobId) && !finished;
+  useEffect(() => { if (finished) void qc.invalidateQueries({ queryKey: ["sped-fiscal-proposals"] }); }, [finished, qc]);
+  return <Card className="mb-5 overflow-hidden">
+    <div className="flex flex-wrap items-center gap-3 border-b p-4">
+      <div><b className="text-slate-800">Propostas fiscais geradas do SPED</b><span className="ml-2 text-sm text-slate-500">{total} pendente(s) de revisão</span></div>
+      {pendingReviewCount > 0 && <div className="ml-auto flex items-center gap-2">
+        <span className="text-xs text-slate-500">{pendingReviewCount} campo(s) sem sugestão determinística</span>
+        <Button variant="secondary" disabled={trigger.isPending || running} onClick={() => trigger.mutate()}>
+          {trigger.isPending || running ? <LoaderCircle size={15} className="animate-spin" /> : <Sparkles size={15} />} Sugerir com IA
+        </Button>
+      </div>}
+    </div>
+    {running && status.data && <p className="border-b bg-violet-50 px-4 py-2 text-xs text-violet-800">Processando com IA... {status.data.processed ?? 0}/{status.data.total ?? "?"} propostas analisadas.</p>}
+    {trigger.isError && <div className="border-b p-3"><ErrorState message={getApiErrorMessage(trigger.error)} /></div>}
+    <div className="overflow-x-auto"><table className="w-full min-w-[900px] text-sm"><thead><tr className="bg-slate-50 text-xs uppercase text-slate-500"><th className="p-3 text-left">Produto / família sugerida</th><th className="p-3 text-left">NCM / CEST</th><th className="p-3 text-left">CST ICMS / CFOP</th><th className="p-3 text-left">Alíquota ICMS</th><th className="p-3 text-left">CST PIS / COFINS</th><th className="p-3 text-left">Regras</th></tr></thead><tbody>{items.map(item => {
+      const suggestions = Object.fromEntries((item.evidence.suggestions ?? []).map((s) => [s.field, s]));
+      const needsLegalReview = item.evidence.needsLegalReview ?? [];
+      return <tr key={item.id} className="border-t border-slate-100 align-top">
+        <td className="p-3"><b className="block">{item.canonicalDescription}</b><small className="text-slate-500">{item.productCode} · {item.familyName || item.familyKey || "Família a definir"}</small>{needsLegalReview.length > 0 && <small className="mt-1 block text-amber-700" title={needsLegalReview.map((n) => n.note).join(" ")}>Natureza da Receita: requer conferência legal</small>}</td>
+        <td className="p-3"><FieldWithSuggestion current={item.ncm} suggestion={suggestions.ncm} /> / <FieldWithSuggestion current={item.cest} suggestion={suggestions.cest} /></td>
+        <td className="p-3">{item.taxation.cstIcms || "—"} / {item.taxation.cfop || "—"}</td>
+        <td className="p-3">ICMS <FieldWithSuggestion current={item.evidence.effectiveIcmsRate} suggestion={suggestions.icmsRate} />{item.evidence.effectiveIcmsRate != null || suggestions.icmsRate ? "%" : ""} · IPI {item.evidence.effectiveIpiRate ?? "—"}%</td>
+        <td className="p-3"><FieldWithSuggestion current={item.taxation.cstPis} suggestion={suggestions.cstPis} /> / <FieldWithSuggestion current={item.taxation.cstCofins} suggestion={suggestions.cstCofins} /></td>
+        <td className="p-3">{item.validation.error ? "Validação indisponível" : `${item.validation.standard?.matchedRules?.length ?? 0} regra(s) encontrada(s)`}</td>
+      </tr>;
+    })}</tbody></table></div>
+  </Card>;
+}
 
 function TransmissionSummaryCards({ summary, loading, selectedIssue, origin, queryCode, select }: { summary?: TransmissionSummary; loading: boolean; selectedIssue: string; origin: OriginFilter; queryCode: QueryFilter; select: (issue: string) => void }) {
   const cards = [["Total de itens", summary?.totalItems ?? summary?.products ?? 0, "all"], ["Sem pendência", summary?.withoutPending ?? 0, "ok"], ["NCM pendente", summary?.missingNcm ?? 0, "ncm"], ["CEST pendente", summary?.missingCest ?? 0, "cest"], ["CST ICMS pendente", summary?.missingCstIcms ?? 0, "cst"], ["CFOP pendente", summary?.missingCfop ?? 0, "cfop"]];
