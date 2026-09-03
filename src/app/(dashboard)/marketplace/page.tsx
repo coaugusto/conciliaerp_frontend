@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Download,
@@ -21,13 +21,20 @@ import {
   initialCatalogLoadService,
   type InitialCatalogReviewRow,
 } from "@/services/initial-catalog-load.service";
-import { masterCatalogService, type MasterCatalogProduct, type MasterCatalogTaxationStatus, type TaxationSuggestionBulkApplyRow, type TaxationSuggestionBulkApplyResult } from "@/services/master-catalog.service";
+import { masterCatalogService, taxationDisplayName, taxationRoute, type MasterCatalogProduct, type MasterCatalogTaxationStatus, type MasterCatalogTaxationStatusCounts, type TaxationSuggestionBulkApplyRow, type TaxationSuggestionBulkApplyResult } from "@/services/master-catalog.service";
 
 const suggestionColumns = ["Código", "Descrição", "NCM", "Método", "Tributação sugerida", "UF origem→destino", "CST_ICMS", "CST_PIS", "CST_COFINS", "CST_IPI", "Confiança", "Base/Justificativa", "Decisão", "Observação", "_Candidato"] as const;
 
 const taxationStatusLabels: Record<MasterCatalogTaxationStatus, string> = { MISSING: "Sem tributação", NEW: "Nova do cadastro", REUSED: "Reaproveitada", NEEDS_CONFIRMATION: "Aguardando confirmação" };
 const taxationStatusTone: Record<MasterCatalogTaxationStatus, string> = { MISSING: "bg-amber-100 text-amber-800", NEW: "bg-slate-100 text-slate-700", REUSED: "bg-emerald-100 text-emerald-800", NEEDS_CONFIRMATION: "bg-violet-100 text-violet-800" };
 const PAGE_SIZE = 50;
+
+// Resumo dos critérios que fizeram a tributação ser reaproveitada — mostrado ao passar o mouse
+// sobre o selo "Reaproveitada", sem precisar abrir o detalhe do produto. Edição de fato fica no
+// detalhe do produto (link "Detalhes" já leva pra lá).
+function reusedTaxationTooltip(profiles: MasterCatalogProduct["taxation"]["profiles"]): string {
+  return profiles.map((profile) => `${taxationDisplayName(profile)} · ${taxationRoute(profile).origin}→${taxationRoute(profile).destination} · CST ${profile.cstIcms ?? "—"}${profile.sourceTaxationRef ? ` · Nº ${profile.sourceTaxationRef}` : ""}`).join("\n");
+}
 
 const columns = [
   "Código",
@@ -47,21 +54,26 @@ export default function Marketplace() {
   const { user } = useAuth();
   const isAdmin = user?.role === "ADMIN";
   const [statusFilter, setStatusFilter] = useState<MasterCatalogTaxationStatus | null>(null);
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
+  // O catálogo publicado pode ter milhares de produtos e centenas de milhares de vínculos de
+  // tributação — buscar/filtrar tudo no cliente já travou o motor do Prisma pra um tenant real.
+  // Busca e paginação agora são feitas no servidor; um pequeno debounce evita disparar uma
+  // requisição a cada tecla digitada.
+  useEffect(() => {
+    const handle = setTimeout(() => { setSearch(searchInput); setPage(1); }, 350);
+    return () => clearTimeout(handle);
+  }, [searchInput]);
   const catalog = useQuery({
-    queryKey: ["marketplace"],
-    queryFn: masterCatalogService.list,
+    queryKey: ["marketplace", search, statusFilter, page],
+    queryFn: () => masterCatalogService.list({ search: search || undefined, taxationStatus: statusFilter ?? undefined, page, pageSize: PAGE_SIZE }),
   });
-  const items = useMemo(() => catalog.data ?? [], [catalog.data]);
-  const searched = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    if (!query) return items;
-    return items.filter((product) => product.canonicalDescription.toLowerCase().includes(query) || (product.gtin ?? "").includes(query) || (product.ncm ?? "").includes(query));
-  }, [items, search]);
-  const filtered = useMemo(() => statusFilter ? searched.filter((product) => product.taxation.status === statusFilter) : searched, [searched, statusFilter]);
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const pageItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  // Contagem por status é sempre sobre o catálogo inteiro (não a página atual) — consulta
+  // separada e mais leve, independente do que está sendo pesquisado/paginado no momento.
+  const summary = useQuery({ queryKey: ["marketplace-summary"], queryFn: masterCatalogService.summary });
+  const items = catalog.data?.items ?? [];
+  const totalPages = catalog.data?.totalPages ?? 1;
   const candidates = useQuery({
     queryKey: ["initial-catalog-load", "candidates"],
     queryFn: initialCatalogLoadService.candidates,
@@ -76,6 +88,7 @@ export default function Marketplace() {
     mutationFn: () => initialCatalogLoadService.importReviewed(approved),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["marketplace"] });
+      queryClient.invalidateQueries({ queryKey: ["marketplace-summary"] });
       setReviewed([]);
       setFileName("");
     },
@@ -195,6 +208,26 @@ export default function Marketplace() {
           </p>
         </div>
       </div>
+      <CatalogSummaryCards
+        summary={summary.data}
+        loading={summary.isLoading}
+        active={statusFilter}
+        onSelect={(value) => {
+          setStatusFilter((current) => (current === value ? null : value));
+          setPage(1);
+        }}
+      />
+      <Card className="mb-4 p-4">
+        <label className="grid max-w-sm gap-1 text-sm font-medium text-slate-700">
+          Buscar por descrição, GTIN ou NCM
+          <input
+            value={searchInput}
+            onChange={(event) => setSearchInput(event.target.value)}
+            placeholder="Digite para filtrar"
+            className="h-9 rounded-md border border-slate-300 px-2 text-sm font-normal"
+          />
+        </label>
+      </Card>
       {catalog.isLoading ? (
         <p className="p-8 text-sm text-slate-500">
           Carregando Catálogo Central...
@@ -203,29 +236,7 @@ export default function Marketplace() {
         <ErrorState message="Não foi possível consultar o Catálogo Central." />
       ) : (
         <>
-          <CatalogSummaryCards
-            items={searched}
-            active={statusFilter}
-            onSelect={(value) => {
-              setStatusFilter((current) => (current === value ? null : value));
-              setPage(1);
-            }}
-          />
-          <Card className="mb-4 p-4">
-            <label className="grid max-w-sm gap-1 text-sm font-medium text-slate-700">
-              Buscar por descrição, GTIN ou NCM
-              <input
-                value={search}
-                onChange={(event) => {
-                  setSearch(event.target.value);
-                  setPage(1);
-                }}
-                placeholder="Digite para filtrar"
-                className="h-9 rounded-md border border-slate-300 px-2 text-sm font-normal"
-              />
-            </label>
-          </Card>
-          <CatalogProductsTable items={pageItems} total={filtered.length} page={page} totalPages={totalPages} setPage={setPage} />
+          <CatalogProductsTable items={items} total={catalog.data?.total ?? 0} page={page} totalPages={totalPages} setPage={setPage} />
         </>
       )}
     </>
@@ -233,18 +244,20 @@ export default function Marketplace() {
 }
 
 function CatalogSummaryCards({
-  items,
+  summary,
+  loading,
   active,
   onSelect,
 }: {
-  items: MasterCatalogProduct[];
+  summary: MasterCatalogTaxationStatusCounts | undefined;
+  loading: boolean;
   active: MasterCatalogTaxationStatus | null;
   onSelect: (value: MasterCatalogTaxationStatus) => void;
 }) {
   const statuses: MasterCatalogTaxationStatus[] = ["MISSING", "NEW", "REUSED", "NEEDS_CONFIRMATION"];
   const cards = [
-    { label: "Total publicado", value: null as MasterCatalogTaxationStatus | null, count: items.length },
-    ...statuses.map((status) => ({ label: taxationStatusLabels[status], value: status, count: items.filter((item) => item.taxation.status === status).length })),
+    { label: "Total publicado", value: null as MasterCatalogTaxationStatus | null, count: summary?.total },
+    ...statuses.map((status) => ({ label: taxationStatusLabels[status], value: status, count: summary?.[status] })),
   ];
   return (
     <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Resumo do Catálogo Central">
@@ -259,7 +272,7 @@ function CatalogSummaryCards({
         >
           <Card className={`h-full p-4 transition ${card.value ? "hover:border-blue-300 hover:shadow-sm" : ""} ${active === card.value && card.value ? "border-blue-500 bg-blue-50" : ""}`}>
             <p className="text-xs font-semibold uppercase text-slate-500">{card.label}</p>
-            <p className="mt-2 text-2xl font-bold text-slate-900">{card.count}</p>
+            <p className="mt-2 text-2xl font-bold text-slate-900">{loading ? "…" : card.count ?? 0}</p>
             {card.value && <p className="mt-2 text-xs text-blue-700">{active === card.value ? "Filtro ativo — clique para limpar" : "Clique para filtrar"}</p>}
           </Card>
         </button>
@@ -302,7 +315,7 @@ function CatalogProductsTable({
                 <td className="p-3 font-mono text-xs">{product.gtin ?? "—"} · {product.ncm ?? "—"}</td>
                 <td className="p-3">{product.category ?? "—"}</td>
                 <td className="p-3">{Math.round(Number(product.confidence) * 100)}%</td>
-                <td className="p-3"><span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${taxationStatusTone[product.taxation.status]}`}>{taxationStatusLabels[product.taxation.status]}</span></td>
+                <td className="p-3"><span title={product.taxation.status === "REUSED" ? reusedTaxationTooltip(product.taxation.profiles) : undefined} className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${taxationStatusTone[product.taxation.status]} ${product.taxation.status === "REUSED" ? "cursor-help" : ""}`}>{taxationStatusLabels[product.taxation.status]}</span></td>
                 <td className="p-3 text-right"><Link href={`/marketplace/products/${encodeURIComponent(product.id)}`} className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-800"><Eye size={14} />Detalhes</Link></td>
               </tr>
             ))}
@@ -480,7 +493,7 @@ function TaxationSuggestionsCard() {
   const accepted = reviewedRows.filter((row) => row.decision === "ACEITAR");
   const applyMutation = useMutation({
     mutationFn: () => masterCatalogService.acceptTaxationSuggestionsBulk(reviewedRows),
-    onSuccess: (data) => { setResult(data); queryClient.invalidateQueries({ queryKey: ["marketplace"] }); setReviewedRows([]); setFileName(""); },
+    onSuccess: (data) => { setResult(data); queryClient.invalidateQueries({ queryKey: ["marketplace"] }); queryClient.invalidateQueries({ queryKey: ["marketplace-summary"] }); setReviewedRows([]); setFileName(""); },
   });
 
   const exportSuggestions = async () => {
@@ -499,7 +512,7 @@ function TaxationSuggestionsCard() {
           "NCM": row.ncm ?? "",
           "Método": isAiAssisted ? "IA (escolhida entre tributações reais)" : "Similaridade direta",
           "Tributação sugerida": String(taxation.name ?? ""),
-          "UF origem→destino": `${taxation.companyState}→${taxation.counterpartyState}`,
+          "UF origem→destino": `${taxationRoute(taxation as { companyState: string; counterpartyState: string; taxationType: string | null }).origin}→${taxationRoute(taxation as { companyState: string; counterpartyState: string; taxationType: string | null }).destination}`,
           "CST_ICMS": String(taxation.cstIcms ?? ""),
           "CST_PIS": String(taxation.cstPis ?? ""),
           "CST_COFINS": String(taxation.cstCofins ?? ""),

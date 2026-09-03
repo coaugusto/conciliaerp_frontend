@@ -3,12 +3,29 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Database, Edit3, Link2, Receipt, Save, Search, Sparkles, X } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
 import { useAuth } from "@/providers/providers";
-import { masterCatalogService, type MasterCatalogProductChanges, type MasterCatalogProductDetail, type MasterCatalogTaxationProfile, type MasterCatalogTaxationStatus, type TaxationSearchResult, type TaxationSuggestionCandidate } from "@/services/master-catalog.service";
+import { clientContextService } from "@/services/client-context.service";
+import { TaxationEditForm } from "@/components/master-catalog/taxation-editor";
+import { masterCatalogService, taxationDisplayName, taxationRoute, type MasterCatalogProductChanges, type MasterCatalogProductDetail, type MasterCatalogTaxationProfile, type MasterCatalogTaxationStatus, type TaxationSearchResult, type TaxationSuggestionCandidate } from "@/services/master-catalog.service";
+
+/** UF da empresa ("Ambiente") atualmente selecionada — usada pra filtrar a tabela de tributação
+ * pra só mostrar UF de Origem relevante pra essa empresa, em vez de todas as UFs de todos os
+ * estabelecimentos do tenant. Reage ao evento que o seletor de Ambiente (app-shell.tsx) dispara
+ * ao trocar de empresa, já que localStorage não é reativo por si só. */
+function useSelectedCompanyState() {
+  const [companyId, setCompanyId] = useState(() => (typeof window === "undefined" ? "" : localStorage.getItem("concilia_company_id") ?? ""));
+  useEffect(() => {
+    const sync = () => setCompanyId(localStorage.getItem("concilia_company_id") ?? "");
+    window.addEventListener("concilia:company-changed", sync);
+    return () => window.removeEventListener("concilia:company-changed", sync);
+  }, []);
+  const clients = useQuery({ queryKey: ["client-context"], queryFn: clientContextService.list, enabled: Boolean(companyId) });
+  return clients.data?.find((client) => client.companyIds.includes(companyId))?.state ?? null;
+}
 
 const taxationStatusLabels: Record<MasterCatalogTaxationStatus, string> = { MISSING: "Sem tributação", NEW: "Nova do cadastro", REUSED: "Reaproveitada", NEEDS_CONFIRMATION: "Aguardando confirmação" };
 const taxationStatusTone: Record<MasterCatalogTaxationStatus, string> = { MISSING: "bg-amber-100 text-amber-800", NEW: "bg-slate-100 text-slate-700", REUSED: "bg-emerald-100 text-emerald-800", NEEDS_CONFIRMATION: "bg-violet-100 text-violet-800" };
@@ -45,6 +62,8 @@ export default function MasterCatalogProductDetailPage() {
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["master-catalog-product", productId] });
   const save = useMutation({ mutationFn: (changes: MasterCatalogProductChanges) => masterCatalogService.update(productId, changes), onSuccess: () => { setEditing(false); refresh(); } });
   const linkTaxation = useMutation({ mutationFn: (taxationId: string) => masterCatalogService.linkTaxation(productId, taxationId), onSuccess: refresh });
+  const gtinSuggestion = useMutation({ mutationFn: ({ approvalId, decision }: { approvalId: string; decision: "ACCEPT" | "REJECT" }) => masterCatalogService.resolveGtinSuggestion(productId, approvalId, decision), onSuccess: refresh });
+  const companyState = useSelectedCompanyState();
 
   if (product.isLoading) return <div className="space-y-4"><div className="h-24 animate-pulse rounded-xl bg-slate-100" /><div className="h-72 animate-pulse rounded-xl bg-slate-100" /></div>;
   if (product.isError || !product.data) return <><PageHeader title="Detalhes do produto" description="Produto do Catálogo Central." /><ErrorState message="Não foi possível carregar este produto." /><Link href="/marketplace" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-cyan-700 hover:underline"><ArrowLeft size={16} />Voltar ao Catálogo Central</Link></>;
@@ -79,6 +98,23 @@ export default function MasterCatalogProductDetailPage() {
           </dl>}
     </Card>
 
+    {isAdmin && item.gtinSuggestion && (
+      <Card className="mt-5 border-amber-200 bg-amber-50/50 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">EAN sugerido a partir de um arquivo SPED</p>
+            <p className="mt-1 font-mono text-lg font-bold text-slate-900">{item.gtinSuggestion.candidateGtin}</p>
+            <p className="mt-1 text-xs text-slate-600">Sinais que confirmam ser o mesmo produto: {item.gtinSuggestion.matchedSignals.join(", ")}. Casamento por descrição+NCM (não por GTIN exato) — confira antes de aceitar.</p>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={() => gtinSuggestion.mutate({ approvalId: item.gtinSuggestion!.approvalId, decision: "ACCEPT" })} disabled={gtinSuggestion.isPending}>{gtinSuggestion.isPending ? "Aplicando..." : "Aceitar"}</Button>
+            <Button variant="secondary" onClick={() => gtinSuggestion.mutate({ approvalId: item.gtinSuggestion!.approvalId, decision: "REJECT" })} disabled={gtinSuggestion.isPending}>Rejeitar</Button>
+          </div>
+        </div>
+        {gtinSuggestion.isError && <p className="mt-2 text-xs text-red-700">{getApiErrorMessage(gtinSuggestion.error)}</p>}
+      </Card>
+    )}
+
     <Card className="mt-5 overflow-hidden">
       <div className="flex items-center justify-between border-b border-slate-200 p-4">
         <div className="flex items-center gap-2"><Receipt size={19} className="text-cyan-700" /><h2 className="font-bold text-slate-900">Tributação</h2></div>
@@ -87,7 +123,7 @@ export default function MasterCatalogProductDetailPage() {
       {!item.taxation.profiles.length ? (
         <p className="p-5 text-sm text-slate-500">{item.taxation.otherTenantHasTaxation ? "Nenhuma tributação registrada pelo seu cliente para este produto (outro cliente já possui)." : "Nenhuma tributação registrada para este produto."}</p>
       ) : (
-        <TaxationProfilesTable profiles={item.taxation.profiles} />
+        <TaxationProfilesTable profiles={item.taxation.profiles} companyState={companyState} isAdmin={isAdmin} onSaved={refresh} />
       )}
       {isAdmin && item.taxation.status === "MISSING" && <TaxationSuggestions productId={productId} onAccept={refresh} />}
       {isAdmin && <TaxationLinkPicker linkedIds={item.taxation.profiles.map((profile) => profile.id)} onLink={(taxationId) => linkTaxation.mutate(taxationId)} linking={linkTaxation.isPending} error={linkTaxation.error} />}
@@ -95,35 +131,59 @@ export default function MasterCatalogProductDetailPage() {
   </>;
 }
 
-function TaxationProfilesTable({ profiles }: { profiles: MasterCatalogTaxationProfile[] }) {
+function TaxationEditRow({ profile, onCancel, onSaved }: { profile: MasterCatalogTaxationProfile; onCancel: () => void; onSaved: () => void }) {
+  return (
+    <tr className="border-t border-slate-100 bg-blue-50/40">
+      <td colSpan={10} className="p-4"><TaxationEditForm profile={profile} onCancel={onCancel} onSaved={onSaved} /></td>
+    </tr>
+  );
+}
+
+function TaxationProfilesTable({ profiles, companyState, isAdmin, onSaved }: { profiles: MasterCatalogTaxationProfile[]; companyState: string | null; isAdmin: boolean; onSaved: () => void }) {
   const [activeType, setActiveType] = useState<string | null>(null);
-  const types = [...new Set(profiles.map((profile) => profile.taxationType ?? ""))].sort((a, b) => taxationTypeLabel(a || null).localeCompare(taxationTypeLabel(b || null)));
-  const visible = activeType === null ? profiles : profiles.filter((profile) => (profile.taxationType ?? "") === activeType);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  // Um tenant pode ter estabelecimentos em várias UFs — sem esse filtro a tabela mistura a
+  // tributação de UFs de Origem que não têm nada a ver com a empresa selecionada no momento.
+  // Se a UF da empresa não bater com nenhuma linha (ainda não reconciliado pra essa UF, por
+  // exemplo), mostra tudo em vez de uma tela vazia.
+  const scopedToCompanyUf = companyState ? profiles.filter((profile) => profile.companyState === companyState) : profiles;
+  const scopedByOtherUf = companyState && scopedToCompanyUf.length === 0 && profiles.length > 0;
+  const scoped = scopedByOtherUf ? profiles : scopedToCompanyUf;
+  const types = [...new Set(scoped.map((profile) => profile.taxationType ?? ""))].sort((a, b) => taxationTypeLabel(a || null).localeCompare(taxationTypeLabel(b || null)));
+  const visible = activeType === null ? scoped : scoped.filter((profile) => (profile.taxationType ?? "") === activeType);
   return (
     <>
+      {scopedByOtherUf && <p className="border-b border-slate-200 bg-amber-50 p-3 text-xs text-amber-800">Nenhuma tributação com UF de Origem {companyState} para este produto — mostrando as {profiles.length} tributação(ões) de outras UFs.</p>}
+      {companyState && !scopedByOtherUf && scopedToCompanyUf.length < profiles.length && <p className="border-b border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">Mostrando só a tributação com UF de Origem {companyState} ({scopedToCompanyUf.length} de {profiles.length} no total).</p>}
       {types.length > 1 && (
         <div role="tablist" aria-label="Tipo de operação" className="flex flex-wrap gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 p-2">
-          <button role="tab" aria-selected={activeType === null} onClick={() => setActiveType(null)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${activeType === null ? "bg-white text-cyan-800 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`}>Todos ({profiles.length})</button>
+          <button role="tab" aria-selected={activeType === null} onClick={() => setActiveType(null)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${activeType === null ? "bg-white text-cyan-800 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`}>Todos ({scoped.length})</button>
           {types.map((type) => {
-            const count = profiles.filter((profile) => (profile.taxationType ?? "") === type).length;
+            const count = scoped.filter((profile) => (profile.taxationType ?? "") === type).length;
             return <button key={type || "sem-tipo"} role="tab" aria-selected={activeType === type} onClick={() => setActiveType(type)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${activeType === type ? "bg-white text-cyan-800 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`}>{taxationTypeLabel(type || null)} ({count})</button>;
           })}
         </div>
       )}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1080px] text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="p-3">Nome</th><th className="p-3">Tipo</th><th className="p-3">UF origem → destino</th><th className="p-3">CST ICMS/IPI/PIS/COFINS</th><th className="p-3">CFOP</th><th className="p-3">ICMS / ST / MVA</th><th className="p-3">FCP / DIFAL</th><th className="p-3">Origem</th></tr></thead>
+          <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="p-3">Nome</th><th className="p-3">Nº Tributação</th><th className="p-3">Tipo</th><th className="p-3">UF origem → destino</th><th className="p-3">CST ICMS/IPI/PIS/COFINS</th><th className="p-3">CFOP</th><th className="p-3">ICMS / ST / MVA</th><th className="p-3">FCP / DIFAL</th><th className="p-3">Origem</th>{isAdmin && <th className="p-3 text-right">Ação</th>}</tr></thead>
           <tbody>
-            {visible.map((profile) => <tr key={profile.id} className="border-t border-slate-100">
-              <td className="p-3 font-medium">{profile.name ?? "—"}</td>
-              <td className="p-3 text-xs text-slate-600">{taxationTypeLabel(profile.taxationType)}</td>
-              <td className="p-3">{profile.companyState} → {profile.counterpartyState}</td>
-              <td className="p-3 font-mono text-xs">{profile.cstIcms ?? "—"} / {profile.cstIpi ?? "—"} / {profile.cstPis ?? "—"} / {profile.cstCofins ?? "—"}</td>
-              <td className="p-3">{profile.cfop ?? "—"}</td>
-              <td className="p-3">{profile.icmsRate ?? "—"}% / {profile.icmsStRate ?? "—"}% / {profile.icmsStMvaPct ?? "—"}%</td>
-              <td className="p-3">{profile.fcpRate ?? "—"}% / {profile.difalRate ?? "—"}%</td>
-              <td className="p-3 text-xs text-slate-500">{linkSourceLabels[profile.linkSource]}</td>
-            </tr>)}
+            {visible.map((profile) => editingId === profile.id ? (
+              <TaxationEditRow key={profile.id} profile={profile} onCancel={() => setEditingId(null)} onSaved={onSaved} />
+            ) : (
+              <tr key={profile.id} className="border-t border-slate-100">
+                <td className="p-3 font-medium">{taxationDisplayName(profile)}</td>
+                <td className="p-3 font-mono text-xs">{profile.sourceTaxationRef ?? "—"}</td>
+                <td className="p-3 text-xs text-slate-600">{taxationTypeLabel(profile.taxationType)}</td>
+                <td className="p-3">{taxationRoute(profile).origin} → {taxationRoute(profile).destination}</td>
+                <td className="p-3 font-mono text-xs">{profile.cstIcms ?? "—"} / {profile.cstIpi ?? "—"} / {profile.cstPis ?? "—"} / {profile.cstCofins ?? "—"}</td>
+                <td className="p-3">{profile.cfop ?? "—"}</td>
+                <td className="p-3">{profile.icmsRate ?? "—"}% / {profile.icmsStRate ?? "—"}% / {profile.icmsStMvaPct ?? "—"}%</td>
+                <td className="p-3">{profile.fcpRate ?? "—"}% / {profile.difalRate ?? "—"}%</td>
+                <td className="p-3 text-xs text-slate-500">{linkSourceLabels[profile.linkSource]}</td>
+                {isAdmin && <td className="p-3 text-right"><Button variant="secondary" onClick={() => setEditingId(profile.id)}><Edit3 size={14} />Editar</Button></td>}
+              </tr>
+            ))}
           </tbody>
         </table>
       </div>
@@ -134,7 +194,13 @@ function TaxationProfilesTable({ profiles }: { profiles: MasterCatalogTaxationPr
 function TaxationSuggestions({ productId, onAccept }: { productId: string; onAccept: () => void }) {
   const [enabled, setEnabled] = useState(false);
   const suggestions = useQuery({ queryKey: ["master-catalog-taxation-suggestions", productId], queryFn: () => masterCatalogService.taxationSuggestions(productId), enabled });
-  const accept = useMutation({ mutationFn: (candidate: TaxationSuggestionCandidate) => masterCatalogService.acceptTaxationSuggestion(productId, candidate), onSuccess: onAccept });
+  // Aceitar uma sugestão vincula a tributação — as outras candidatas eram alternativas pro mesmo
+  // produto, não fazem mais sentido depois disso. Tira da lista na hora (sem esperar o refetch,
+  // que só vem depois que o servidor confirma) e trava as demais enquanto uma aceitação está em
+  // andamento, pra não aceitar duas candidatas diferentes por engano em cliques rápidos.
+  const [acceptedIds, setAcceptedIds] = useState<Set<string>>(new Set());
+  const accept = useMutation({ mutationFn: (candidate: TaxationSuggestionCandidate) => masterCatalogService.acceptTaxationSuggestion(productId, candidate), onSuccess: (_, candidate) => { setAcceptedIds((current) => new Set(current).add(candidate.taxationId)); onAccept(); } });
+  const visibleSuggestions = (suggestions.data ?? []).filter((candidate) => !acceptedIds.has(candidate.taxationId));
   return (
     <div className="border-t border-slate-200 p-5">
       <div className="flex items-center justify-between">
@@ -144,16 +210,16 @@ function TaxationSuggestions({ productId, onAccept }: { productId: string; onAcc
       <p className="mt-1 text-xs text-slate-500">Busca produtos reais parecidos (mesmo NCM, prefixo de NCM ou categoria) já tributados no catálogo; só usa IA — para escolher entre tributações reais mais amplas, nunca para inventar uma — quando nada disso encontra nada. Nunca cria dado novo sem base real.</p>
       {enabled && suggestions.isLoading && <p className="mt-2 text-xs text-slate-500">Buscando sugestão...</p>}
       {enabled && suggestions.isError && <p className="mt-2 text-xs text-red-700">Não foi possível gerar sugestão.</p>}
-      {enabled && !suggestions.isLoading && !suggestions.data?.length && <p className="mt-2 text-xs text-slate-500">Nenhuma sugestão disponível — não há nenhum produto parecido nem nenhuma tributação real no catálogo que a IA pudesse indicar. Nada foi inventado.</p>}
-      {!!suggestions.data?.length && (
+      {enabled && !suggestions.isLoading && !visibleSuggestions.length && <p className="mt-2 text-xs text-slate-500">{suggestions.data?.length ? "Sugestão aceita." : "Nenhuma sugestão disponível — não há nenhum produto parecido nem nenhuma tributação real no catálogo que a IA pudesse indicar. Nada foi inventado."}</p>}
+      {!!visibleSuggestions.length && (
         <ul className="mt-3 space-y-3">
-          {suggestions.data.map((candidate, index) => {
+          {visibleSuggestions.map((candidate, index) => {
             const taxation = candidate.taxation as Record<string, unknown>;
             const isAiAssisted = candidate.method === "AI_ASSISTED_MATCH";
             return (
               <li key={index} className={`rounded-lg border p-3 text-sm ${isAiAssisted ? "border-amber-300 bg-amber-50" : "border-slate-200"}`}>
                 <div className="flex flex-wrap items-center justify-between gap-2">
-                  <b className={isAiAssisted ? "text-amber-900" : "text-slate-800"}>{String(taxation.name ?? "(sem nome)")}</b>
+                  <b className={isAiAssisted ? "text-amber-900" : "text-slate-800"}>{taxationDisplayName(taxation as { name: string | null; cstIcms: string | null; icmsRate: string | number | null; icmsStMvaPct: string | number | null })}</b>
                   <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold uppercase ${isAiAssisted ? "bg-amber-200 text-amber-900" : "bg-emerald-100 text-emerald-800"}`}>{isAiAssisted ? "IA escolheu entre dados reais — revisar com atenção" : "Baseado em produto real"}</span>
                 </div>
                 <p className={`mt-1 text-xs ${isAiAssisted ? "text-amber-900" : "text-slate-500"}`}>
@@ -161,7 +227,8 @@ function TaxationSuggestions({ productId, onAccept }: { productId: string; onAcc
                   {" · confiança "}{Math.round(candidate.confidence * 100)}%
                 </p>
                 <dl className="mt-2 grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
-                  <div><dt className="text-slate-400">UF</dt><dd>{String(taxation.companyState)} → {String(taxation.counterpartyState)}</dd></div>
+                  <div><dt className="text-slate-400">Tipo</dt><dd>{taxationTypeLabel(typeof taxation.taxationType === "string" ? taxation.taxationType : null)}</dd></div>
+                  <div><dt className="text-slate-400">UF</dt><dd>{taxationRoute(taxation as { companyState: string; counterpartyState: string; taxationType: string | null }).origin} → {taxationRoute(taxation as { companyState: string; counterpartyState: string; taxationType: string | null }).destination}</dd></div>
                   <div><dt className="text-slate-400">CST ICMS</dt><dd>{String(taxation.cstIcms ?? "—")}</dd></div>
                   <div><dt className="text-slate-400">CST PIS/COFINS</dt><dd>{String(taxation.cstPis ?? "—")} / {String(taxation.cstCofins ?? "—")}</dd></div>
                 </dl>
@@ -198,12 +265,13 @@ function TaxationLinkPicker({ linkedIds, onLink, linking, error }: { linkedIds: 
             const alreadyLinked = linkedIds.includes(taxation.id);
             return <li key={taxation.id} className={`p-3 text-sm ${selected?.id === taxation.id ? "bg-blue-50" : ""}`}>
               <button type="button" className="w-full text-left" onClick={() => setSelected(taxation)}>
-                <b className="text-slate-800">{taxation.name ?? "(sem nome)"}</b>
-                <span className="ml-2 text-xs text-slate-500">{taxation.companyState} → {taxation.counterpartyState} · CST ICMS {taxation.cstIcms ?? "—"}</span>
+                <b className="text-slate-800">{taxationDisplayName(taxation)}</b>
+                <span className="ml-2 text-xs text-slate-500">{taxationRoute(taxation).origin} → {taxationRoute(taxation).destination} · CST ICMS {taxation.cstIcms ?? "—"}</span>
               </button>
               {selected?.id === taxation.id && (
                 <div className="mt-2 rounded-md bg-white p-3 text-xs">
                   <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                    <div><dt className="text-slate-400">Tipo</dt><dd>{taxationTypeLabel(taxation.taxationType)}</dd></div>
                     <div><dt className="text-slate-400">CFOP</dt><dd>{taxation.cfop ?? "—"}</dd></div>
                     <div><dt className="text-slate-400">CST PIS/COFINS</dt><dd>{taxation.cstPis ?? "—"} / {taxation.cstCofins ?? "—"}</dd></div>
                     <div><dt className="text-slate-400">CST IPI</dt><dd>{taxation.cstIpi ?? "—"}</dd></div>

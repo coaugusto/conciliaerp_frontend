@@ -31,12 +31,12 @@ export default function InitialLoadProductDetailPage() {
 
     <div className="grid gap-5 xl:grid-cols-2">
       <DetailCard recordId={data.product.id} title="Cadastro do produto" entityType="MASTER_PRODUCTS_V1" fields={product} keys={["PRODUCT_DESCRIPTION", "NCM", "CEST", "FAMILY_DESCRIPTION", "FISCAL_PRODUCT_CODE"]} labels={{ PRODUCT_DESCRIPTION: "Descrição", NCM: "NCM", CEST: "CEST", FAMILY_DESCRIPTION: "Família", FISCAL_PRODUCT_CODE: "Código fiscal" }} queryId={id} />
-      <DetailCard recordId={data.product.id} title="Tributação (PIS/COFINS/IPI)" entityType="MASTER_PRODUCTS_V1" fields={product} keys={["PIS_CST", "COFINS_CST", "IPI_CST"]} labels={{ PIS_CST: "CST PIS", COFINS_CST: "CST COFINS", IPI_CST: "CST IPI" }} queryId={id} />
+      <DetailCard recordId={data.product.id} title="Tributação (PIS/COFINS/IPI)" entityType="MASTER_PRODUCTS_V1" fields={product} keys={["PIS_CST", "PIS_CST_OUT", "COFINS_CST", "COFINS_CST_OUT", "IPI_CST"]} labels={{ PIS_CST: "CST PIS (Entrada)", PIS_CST_OUT: "CST PIS (Saída)", COFINS_CST: "CST COFINS (Entrada)", COFINS_CST_OUT: "CST COFINS (Saída)", IPI_CST: "CST IPI" }} queryId={id} />
     </div>
 
-    <RecordSection icon={<Barcode size={19} className="text-cyan-700" />} title="Códigos de acesso (GTIN/EAN)" entityType="PRODUCT_ACCESS_CODES_V1" records={data.accessCodes} empty="Nenhum código de acesso do tipo EAN utilizado para venda foi recebido para este produto." queryId={id} />
-    <RecordSection icon={<Boxes size={19} className="text-cyan-700" />} title="Classificação da família" entityType="FAMILY_DIVISION_CATEGORY_V1" records={data.family.classification} empty="Nenhum registro de classificação recebido para esta família." queryId={id} />
-    <RecordSection icon={<Percent size={19} className="text-cyan-700" />} title="Perfil tributário da família" entityType="FAMILY_TAX_PROFILE_V1" records={data.taxation.profiles} empty="Nenhum perfil tributário recebido para esta família." queryId={id} />
+    <AccessCodesSection productId={id} records={data.accessCodes} queryId={id} />
+    <FamilyClassificationSection records={data.family.classification} queryId={id} />
+    <RecordSection icon={<Percent size={19} className="text-cyan-700" />} title="Perfil tributário da família" entityType="FAMILY_TAX_PROFILE_V1" records={data.taxation.profiles} empty="Nenhum perfil tributário recebido para esta família." queryId={id} summaryLabel={record => <span className="truncate text-sm font-medium text-slate-800">{taxProfileDisplayLabel(record)}</span>} />
     <TaxationByOperationSection groups={data.taxation.byOperation} queryId={id} />
     <RecordSection icon={<Percent size={19} className="text-cyan-700" />} title="Alíquotas padrão por UF" entityType="FAMILY_UF_DEFAULT_RATE_V1" records={data.taxation.defaultRates} empty="Nenhuma alíquota padrão recebida." queryId={id} />
     <RecordSection icon={<Database size={19} className="text-cyan-700" />} title="Embalagens" entityType="FAMILY_PACKAGING_V1" records={data.packaging} empty="Nenhuma embalagem recebida para esta família." queryId={id} />
@@ -85,9 +85,86 @@ function DetailCard({ recordId, title, entityType, fields, keys, labels, queryId
   </Card>;
 }
 
-function RecordSection({ icon, title, entityType, records, empty, queryId }: { icon: React.ReactNode; title: string; entityType: string; records: ImportedRecord[]; empty: string; queryId: string }) {
+function RecordSection({ icon, title, entityType, records, empty, queryId, summaryLabel }: { icon: React.ReactNode; title: string; entityType: string; records: ImportedRecord[]; empty: string; queryId: string; summaryLabel?: (record: ImportedRecord) => React.ReactNode }) {
   return <Card className="mt-5 overflow-hidden"><div className="flex items-center gap-2 border-b border-slate-200 p-4"><span>{icon}</span><h2 className="font-bold text-slate-900">{title}</h2><span className="ml-auto text-xs text-slate-500">{records.length} registro(s)</span></div>
-    {!records.length ? <p className="p-5 text-sm text-slate-500">{empty}</p> : <div className="divide-y divide-slate-100">{records.map(record => <RecordRow key={record.id} entityType={entityType} record={record} queryId={queryId} />)}</div>}
+    {!records.length ? <p className="p-5 text-sm text-slate-500">{empty}</p> : <div className="divide-y divide-slate-100">{records.map(record => <RecordRow key={record.id} entityType={entityType} record={record} queryId={queryId} summaryLabel={summaryLabel?.(record)} />)}</div>}
+  </Card>;
+}
+
+// MAP_TRIBUTACAO.DESCAPLICACAO já é a descrição pensada pra leitura humana no próprio ERP —
+// inclusive carrega observações como "(PAUTA REFRIGERANTE)" quando é o caso — por isso é
+// preferida à TRIBUTACAO (código mais curto), usada só como complemento/fallback.
+function taxProfileDisplayLabel(record: ImportedRecord): string {
+  const application = text(record.payload, "TAXATION_APPLICATION");
+  const name = text(record.payload, "TAXATION_NAME");
+  return application || name || record.sourceKey;
+}
+
+/** Diferente de RecordSection: quando não há nenhum código de acesso, correctImportedRecord()
+ * não serve (só edita um registro que já existe) — por isso este bloco tem seu próprio botão
+ * "Adicionar", que chama addAccessCode() (cria um PRODUCT_ACCESS_CODES_V1 novo, marcado como
+ * adicionado manualmente). */
+function AccessCodesSection({ productId, records, queryId }: { productId: string; records: ImportedRecord[]; queryId: string }) {
+  const queryClient = useQueryClient();
+  const [adding, setAdding] = useState(false);
+  const [code, setCode] = useState("");
+  const add = useMutation({
+    mutationFn: () => fiscalComplianceService.addAccessCode(productId, code),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["fiscal-compliance-product", queryId] }); setAdding(false); setCode(""); },
+  });
+  return <Card className="mt-5 overflow-hidden">
+    <div className="flex items-center gap-2 border-b border-slate-200 p-4">
+      <Barcode size={19} className="text-cyan-700" /><h2 className="font-bold text-slate-900">Códigos de acesso (GTIN/EAN)</h2>
+      <span className="ml-auto text-xs text-slate-500">{records.length} registro(s)</span>
+      {!adding && <Button variant="secondary" onClick={() => setAdding(true)}><Barcode size={15} />Adicionar</Button>}
+    </div>
+    {adding && (
+      <div className="border-b border-slate-200 bg-slate-50 p-4">
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="grid gap-1 text-sm font-medium text-slate-700">Código de barras (EAN/GTIN)<input value={code} onChange={event => setCode(event.target.value)} placeholder="Ex.: 7891000100103" className="h-9 w-56 rounded-md border border-slate-300 px-2 text-sm font-normal" /></label>
+          <Button onClick={() => add.mutate()} disabled={!code.trim() || add.isPending}>{add.isPending ? "Salvando…" : "Salvar"}</Button>
+          <Button variant="secondary" onClick={() => { setAdding(false); setCode(""); add.reset(); }} disabled={add.isPending}><X size={15} />Cancelar</Button>
+        </div>
+        {add.isError && <p className="mt-2 text-sm text-red-700">{getApiErrorMessage(add.error)}</p>}
+      </div>
+    )}
+    {!records.length ? <p className="p-5 text-sm text-slate-500">Nenhum código de acesso do tipo EAN utilizado para venda foi recebido para este produto.</p>
+      : <div className="divide-y divide-slate-100">{records.map(record => <RecordRow key={record.id} entityType="PRODUCT_ACCESS_CODES_V1" record={record} queryId={queryId} />)}</div>}
+  </Card>;
+}
+
+/** A extração traz uma linha FAMILY_DIVISION_CATEGORY_V1 por nível da hierarquia mercadológica
+ * (divisão -> categoria nível 1 -> ... -> a categoria ligada à família), então a família aparecia
+ * repetida uma vez por nível. Mostra só o caminho até o último nível (o mais específico), igual
+ * ao Catálogo Central: "BEBIDAS FRIAS › REFRIGERANTES › PET". O clique continua abrindo o mesmo
+ * detalhe/edição de sempre, só que da linha da folha (a mais específica). */
+function buildCategoryBreadcrumb(records: ImportedRecord[]): { path: string[]; leaf: ImportedRecord } | null {
+  if (!records.length) return null;
+  const key = (divisionId: string, categoryId: string) => `${divisionId}:${categoryId}`;
+  const byKey = new Map<string, ImportedRecord>();
+  for (const record of records) { const categoryId = text(record.payload, "CATEGORY_ID"); const divisionId = text(record.payload, "DIVISION_ID"); if (categoryId) byKey.set(key(divisionId, categoryId), record); }
+  const leaf = [...records].sort((a, b) => (Number(text(b.payload, "CATEGORY_LEVEL")) || 0) - (Number(text(a.payload, "CATEGORY_LEVEL")) || 0))[0];
+  const divisionId = text(leaf.payload, "DIVISION_ID");
+  const divisionDescription = text(leaf.payload, "DIVISION_DESCRIPTION");
+  const path: string[] = [];
+  const visited = new Set<string>();
+  let cursorId = text(leaf.payload, "CATEGORY_ID");
+  while (cursorId && !visited.has(key(divisionId, cursorId))) {
+    visited.add(key(divisionId, cursorId));
+    const record = byKey.get(key(divisionId, cursorId));
+    path.unshift(record ? text(record.payload, "CATEGORY_DESCRIPTION") || `Categoria ${cursorId}` : `Categoria ${cursorId}`);
+    cursorId = record ? text(record.payload, "PARENT_CATEGORY_ID") : "";
+  }
+  if (divisionDescription) path.unshift(divisionDescription);
+  return { path, leaf };
+}
+
+function FamilyClassificationSection({ records, queryId }: { records: ImportedRecord[]; queryId: string }) {
+  const result = buildCategoryBreadcrumb(records);
+  return <Card className="mt-5 overflow-hidden">
+    <div className="flex items-center gap-2 border-b border-slate-200 p-4"><Boxes size={19} className="text-cyan-700" /><h2 className="font-bold text-slate-900">Divisão e categoria</h2>{result && <span className="ml-auto text-xs text-slate-500">{records.length} registro(s) na hierarquia</span>}</div>
+    {!result ? <p className="p-5 text-sm text-slate-500">Nenhum registro de classificação recebido para esta família.</p>
+      : <RecordRow entityType="FAMILY_DIVISION_CATEGORY_V1" record={result.leaf} queryId={queryId} summaryLabel={<span className="truncate text-sm font-medium text-slate-800">{result.path.join(" › ")}</span>} />}
   </Card>;
 }
 
@@ -106,7 +183,7 @@ function TaxationByOperationSection({ groups, queryId }: { groups: TaxationOpera
   </Card>;
 }
 
-function RecordRow({ entityType, record, queryId }: { entityType: string; record: ImportedRecord; queryId: string }) {
+function RecordRow({ entityType, record, queryId, summaryLabel }: { entityType: string; record: ImportedRecord; queryId: string; summaryLabel?: React.ReactNode }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const correct = useCorrectRecord(queryId);
@@ -118,7 +195,7 @@ function RecordRow({ entityType, record, queryId }: { entityType: string; record
 
   return <details className="group" open={editing}>
     <summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-3 marker:hidden">
-      <span className="min-w-0 flex-1 truncate font-mono text-xs text-slate-600">{record.sourceKey}</span>
+      <span className="min-w-0 flex-1 truncate">{summaryLabel ?? <span className="font-mono text-xs text-slate-600">{record.sourceKey}</span>}</span>
       <span className="shrink-0 text-xs text-slate-400">{record.origin.query}</span>
       {!editing && <button type="button" onClick={event => { event.preventDefault(); startEdit(); }} className="shrink-0 inline-flex items-center gap-1 rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-50"><Pencil size={13} />Corrigir</button>}
     </summary>
