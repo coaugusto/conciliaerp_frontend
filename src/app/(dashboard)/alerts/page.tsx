@@ -1,8 +1,8 @@
 "use client";
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowRight, Building2, Check, CheckCircle2, Download, Edit3, FileWarning, Info, Layers3, LoaderCircle, PackageSearch, Search, Send, ShieldAlert, Upload, X } from "lucide-react";
+import { ArrowRight, Building2, Check, CheckCircle2, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Download, Edit3, FileWarning, Info, Layers3, LoaderCircle, PackageSearch, Search, Send, ShieldAlert, Upload, X } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader, money } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
 import { fiscalComplianceService } from "@/services/fiscal-compliance.service";
@@ -33,7 +33,7 @@ export default function FiscalAlertsPage(){
   const [search,setSearch]=useState("");
   const visible=useMemo(()=>(alerts.data??[]).filter(group=>entity==="ALL"||group.entity===entity),[alerts.data,entity]);
   const selected=(alerts.data??[]).find(group=>group.id===selectedId)??visible[0];
-  if(alerts.isError)return <><PageHeader title="Central de Alertas" description="Pendências cadastrais e fiscais do cliente."/><ErrorState/></>;
+  if(alerts.isError)return <><PageHeader title="Central de Alertas" description="Pendências cadastrais e fiscais do cliente."/><ErrorState message={getApiErrorMessage(alerts.error)}/></>;
   return <>
     <PageHeader title="Central de Alertas" description="Pendências identificadas nos produtos, tributações e cadastros do cliente." action={<div className="flex flex-wrap items-center gap-2">
       <Button variant="secondary" onClick={()=>exportWorkbook.mutate()} disabled={exportWorkbook.isPending||!alerts.data?.length}>{exportWorkbook.isPending?<LoaderCircle size={16} className="animate-spin"/>:<Download size={16}/>} {exportWorkbook.isPending?"Gerando planilha...":"Baixar"}</Button>
@@ -57,9 +57,15 @@ export default function FiscalAlertsPage(){
 
 function LoadingCards(){return <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{[1,2,3].map(item=><div key={item} className="h-40 animate-pulse rounded-xl bg-slate-100"/>)}</div>}
 function AlertCard({group,selected,select}:{group:FiscalAlertGroup;selected:boolean;select:()=>void}){return <button type="button" onClick={select} className="text-left"><Card className={`h-full p-5 transition hover:-translate-y-0.5 hover:border-cyan-400 hover:shadow-md ${selected?"border-cyan-600 ring-2 ring-cyan-100":""}`}><div className="flex items-start justify-between gap-3"><span className="grid size-10 place-items-center rounded-lg bg-cyan-50 text-cyan-700"><EntityIcon entity={group.entity}/></span><span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${severityStyle[group.severity]}`}>{severityLabel[group.severity]}</span></div><strong className="mt-4 block text-slate-900">{group.title}</strong><p className="mt-1 min-h-10 text-sm text-slate-500">{group.description}</p>{!!group.estimatedImpact&&<p className="mt-2 text-sm font-semibold text-red-700">Impacto estimado: {money(group.estimatedImpact)}</p>}<div className="mt-4 flex items-end justify-between"><span><b className="block text-2xl text-slate-900">{group.affected}</b><small className="text-slate-500">registros afetados</small></span><span className="text-xs font-semibold text-cyan-700">Ver De/Para →</span></div></Card></button>}
+const ALERT_ITEMS_PAGE_SIZE=20;
 function AlertItems({group,search}:{group:FiscalAlertGroup;search:string}){
   const term=search.trim().toLocaleLowerCase("pt-BR");
-  const items=group.items.filter(item=>!term||`${item.code} ${item.description} ${item.currentValue} ${item.suggestedValue} ${item.source} ${Object.values(item.suggestionReference??{}).join(" ")}`.toLocaleLowerCase("pt-BR").includes(term));
+  const filtered=group.items.filter(item=>!term||`${item.code} ${item.description} ${item.currentValue} ${item.suggestedValue} ${item.source} ${Object.values(item.suggestionReference??{}).join(" ")}`.toLocaleLowerCase("pt-BR").includes(term));
+  const [page,setPage]=useState(1);
+  useEffect(()=>{setPage(1);},[group.id,term]);
+  const pageCount=Math.max(1,Math.ceil(filtered.length/ALERT_ITEMS_PAGE_SIZE));
+  const currentPage=Math.min(page,pageCount);
+  const items=filtered.slice((currentPage-1)*ALERT_ITEMS_PAGE_SIZE,currentPage*ALERT_ITEMS_PAGE_SIZE);
   return <div>{items.map(item=>{
     const catalogId=item.productId??item.maintenanceId;
     const href=item.href??(catalogId?`/catalog-review?productId=${encodeURIComponent(catalogId)}&code=${encodeURIComponent(item.code)}&from=alerts`:null);
@@ -69,7 +75,20 @@ function AlertItems({group,search}:{group:FiscalAlertGroup;search:string}){
       {item.spedContext&&<div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950"><b>{item.spedContext.bookkeeping==="EFD_CONTRIBUTIONS"?"EFD-Contribuições":"EFD ICMS/IPI"}</b><span className="ml-2">Registro {item.spedContext.record||"não identificado"}{item.spedContext.parentRecord?` · pai ${item.spedContext.parentRecord}`:""}{item.spedContext.line?` · linha ${item.spedContext.line}`:""}</span><p className="mt-1 text-xs">Registros relacionados: {item.spedContext.relatedRecords.join(", ")||"consultar registro de origem"}</p>{item.spedContext.sourceFile&&<p className="mt-1 font-mono text-xs">{item.spedContext.sourceFile}</p>}</div>}
       {item.actionable===false?<p className="mt-3 text-xs text-slate-500">{item.nonActionableReason??"A correção deve ser realizada na origem da escrituração e o arquivo SPED deve ser validado novamente."}</p>:<AdjustmentActions group={group} item={item}/>}
     </div>;
-  })}{!items.length&&<p className="p-8 text-center text-sm text-slate-500">Nenhum registro corresponde à pesquisa.</p>}</div>;
+  })}{!items.length&&<p className="p-8 text-center text-sm text-slate-500">Nenhum registro corresponde à pesquisa.</p>}
+  {filtered.length>ALERT_ITEMS_PAGE_SIZE&&<AlertItemsPagination page={currentPage} pageCount={pageCount} total={filtered.length} setPage={setPage}/>}
+  </div>;
+}
+function AlertItemsPagination({page,pageCount,total,setPage}:{page:number;pageCount:number;total:number;setPage:(page:number)=>void}){
+  return <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 p-4">
+    <p className="text-xs text-slate-500">Página {page} de {pageCount} · {total} registro(s)</p>
+    <div className="flex items-center gap-1">
+      <Button variant="secondary" onClick={()=>setPage(1)} disabled={page<=1} title="Primeira página"><ChevronsLeft size={16}/></Button>
+      <Button variant="secondary" onClick={()=>setPage(page-1)} disabled={page<=1} title="Página anterior"><ChevronLeft size={16}/></Button>
+      <Button variant="secondary" onClick={()=>setPage(page+1)} disabled={page>=pageCount} title="Próxima página"><ChevronRight size={16}/></Button>
+      <Button variant="secondary" onClick={()=>setPage(pageCount)} disabled={page>=pageCount} title="Última página"><ChevronsRight size={16}/></Button>
+    </div>
+  </div>;
 }
 function Comparison({label,value,tone}:{label:string;value:string;tone:"current"|"suggested"}){return <div className={`rounded-lg border p-4 ${tone==="current"?"border-red-200 bg-red-50":"border-emerald-200 bg-emerald-50"}`}><p className={`text-xs font-semibold uppercase tracking-wide ${tone==="current"?"text-red-700":"text-emerald-700"}`}>{label}</p><strong className="mt-1 block text-slate-900">{value}</strong></div>}
 function SuggestionComparison({item}:{item:FiscalAlertItem}){

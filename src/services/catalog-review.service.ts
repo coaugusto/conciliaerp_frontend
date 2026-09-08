@@ -14,6 +14,8 @@ export type CatalogReviewItem = {
 export type CatalogReviewPage = { items: CatalogReviewItem[]; total: number; page: number; pageSize: number; totalPages: number };
 export type CatalogWebResearchResult = { processed: number; results: { productId: string; status: "ENRICHED" | "EVIDENCE_ONLY" | "NO_MATCH" | "SKIPPED" | "FAILED"; updatedFields?: string[]; evidenceFields?: string[]; reason?: string }[] };
 export type CatalogAiEnrichmentResult = { processed: number; results: { productId: string; status: "AI_ENRICHED" | "AI_NO_MATCH" | "SKIPPED" | "FAILED"; updatedFields?: string[]; reason?: string }[] };
+export type MissingBrandItem = { id: string; canonicalDescription: string; ncm: string | null; category: string | null; brand: string | null; manufacturer: string | null };
+export type MissingBrandPage = { items: MissingBrandItem[]; total: number; page: number; pageSize: number; totalPages: number };
 
 export const catalogReviewService = {
   list: async (page: number) => (await api.get<ApiResponse<CatalogReviewPage>>("/master-catalog/review/pending", { params: { page, pageSize: 50 } })).data.data,
@@ -24,4 +26,5 @@ export const catalogReviewService = {
   resolveTaxationDecision: async (productId: string, approvalId: string, decision: "REUSE_EXISTING" | "KEEP_NEW") => (await api.post(`/master-catalog/review/${encodeURIComponent(productId)}/taxation-decision`, { approvalId, decision })).data.data,
   researchPending: async (limit?: number) => (await api.post<ApiResponse<CatalogWebResearchResult>>("/master-catalog/review/research-pending", limit ? { limit } : {}, { timeout: CATALOG_ENRICHMENT_TIMEOUT_MS })).data.data,
   aiEnrich: async (productIds: string[]) => (await api.post<ApiResponse<CatalogAiEnrichmentResult>>("/master-catalog/review/ai-enrichment", { productIds }, { timeout: CATALOG_ENRICHMENT_TIMEOUT_MS })).data.data,
+  missingBrand: async (page: number) => (await api.get<ApiResponse<MissingBrandPage>>("/master-catalog/missing-brand", { params: { page, pageSize: 50 } })).data.data,
 };

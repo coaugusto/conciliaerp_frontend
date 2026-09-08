@@ -11,6 +11,7 @@ import { useAuth } from "@/providers/providers";
 import { clientContextService } from "@/services/client-context.service";
 import { TaxationEditForm } from "@/components/master-catalog/taxation-editor";
 import { masterCatalogService, taxationDisplayName, taxationRoute, type MasterCatalogProductChanges, type MasterCatalogProductDetail, type MasterCatalogTaxationProfile, type MasterCatalogTaxationStatus, type TaxationSearchResult, type TaxationSuggestionCandidate } from "@/services/master-catalog.service";
+import { catalogReviewService } from "@/services/catalog-review.service";
 
 /** UF da empresa ("Ambiente") atualmente selecionada — usada pra filtrar a tabela de tributação
  * pra só mostrar UF de Origem relevante pra essa empresa, em vez de todas as UFs de todos os
@@ -63,6 +64,7 @@ export default function MasterCatalogProductDetailPage() {
   const save = useMutation({ mutationFn: (changes: MasterCatalogProductChanges) => masterCatalogService.update(productId, changes), onSuccess: () => { setEditing(false); refresh(); } });
   const linkTaxation = useMutation({ mutationFn: (taxationId: string) => masterCatalogService.linkTaxation(productId, taxationId), onSuccess: refresh });
   const gtinSuggestion = useMutation({ mutationFn: ({ approvalId, decision }: { approvalId: string; decision: "ACCEPT" | "REJECT" }) => masterCatalogService.resolveGtinSuggestion(productId, approvalId, decision), onSuccess: refresh });
+  const aiEnrich = useMutation({ mutationFn: () => catalogReviewService.aiEnrich([productId]), onSuccess: refresh });
   const companyState = useSelectedCompanyState();
 
   if (product.isLoading) return <div className="space-y-4"><div className="h-24 animate-pulse rounded-xl bg-slate-100" /><div className="h-72 animate-pulse rounded-xl bg-slate-100" /></div>;
@@ -81,9 +83,15 @@ export default function MasterCatalogProductDetailPage() {
         <div className="flex items-center gap-2"><Database size={19} className="text-cyan-700" /><h2 className="font-bold text-slate-900">Cadastro do produto</h2></div>
         {isAdmin && (editing
           ? <div className="flex gap-2"><Button variant="secondary" onClick={() => setEditing(false)} disabled={save.isPending}><X size={15} />Cancelar</Button><Button onClick={submit} disabled={save.isPending}><Save size={15} />{save.isPending ? "Salvando..." : "Salvar"}</Button></div>
-          : <Button variant="secondary" onClick={startEditing}><Edit3 size={15} />Editar</Button>)}
+          : <div className="flex gap-2"><Button variant="secondary" onClick={() => aiEnrich.mutate()} disabled={aiEnrich.isPending} title="Preenche atributos comerciais (marca, fabricante etc.) pendentes a partir da própria descrição do produto"><Sparkles size={15} />{aiEnrich.isPending ? "Atualizando..." : "Atualizar por IA"}</Button><Button variant="secondary" onClick={startEditing}><Edit3 size={15} />Editar</Button></div>)}
       </div>
       {save.isError && <div className="border-b border-slate-200 p-4"><ErrorState message={getApiErrorMessage(save.error)} /></div>}
+      {aiEnrich.isError && <div className="border-b border-slate-200 p-4"><ErrorState message={getApiErrorMessage(aiEnrich.error)} /></div>}
+      {aiEnrich.isSuccess && <div className="border-b border-slate-200 p-4">
+        {(() => { const outcome = aiEnrich.data.results[0]; return outcome?.status === "AI_ENRICHED"
+          ? <p role="status" className="text-sm font-medium text-emerald-700">Atualizado por IA: {outcome.updatedFields?.join(", ")}.</p>
+          : <p role="status" className="text-sm text-slate-500">{outcome?.status === "SKIPPED" ? "Nenhum campo pendente para atualizar." : "Nenhuma sugestão confiável encontrada."}</p>; })()}
+      </div>}
       {editing
         ? <div className="grid gap-4 p-5 sm:grid-cols-2 lg:grid-cols-3">{editableFields.map(({ key, label, type }) => <label key={key} className="grid gap-1 text-sm font-medium text-slate-700">{label}<input type={type ?? "text"} value={draft[key] ?? ""} onChange={(event) => setDraft({ ...draft, [key]: event.target.value })} className="h-9 rounded-md border border-slate-300 px-2 font-normal text-slate-800" /></label>)}</div>
         : <dl className="grid gap-x-5 sm:grid-cols-2">

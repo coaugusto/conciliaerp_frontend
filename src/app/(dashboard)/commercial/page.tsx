@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Check, ChevronDown, Copy, Download, KeyRound, Play, RefreshCw, Settings2, ShieldCheck, Trash2, X } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button, Card, ErrorState, PageHeader } from "@/components/shared/ui";
-import { commercialService, type ClientServiceFlag } from "@/services/commercial.service";
+import { commercialService, type ClientServiceFlag, type ConnectorIdentity } from "@/services/commercial.service";
 import { connectorDesktopService } from "@/services/connector-desktop.service";
 import { api, getApiErrorMessage, type ApiResponse } from "@/services/api/client";
 import { useAuth } from "@/providers/providers";
@@ -57,7 +57,9 @@ export default function CommercialPortal() {
     <TabDropdown title="Cadastro do cliente" description="Crie um cliente e gere seu CNC_CODE." defaultOpen>
     <Card className="mb-5 max-w-3xl p-5"><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Cadastro de cliente</p><h2 className="mt-1 text-lg font-bold text-slate-900">Criar cliente e CNC_CODE</h2><p className="mt-1 text-sm text-slate-500">Informe o nome. O CNC_CODE exclusivo será gerado automaticamente, gravado na API e selecionado para seu usuário.</p></div><div className="mt-5 grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold text-slate-700">Nome do cliente<input value={newClientName} onChange={event => setNewClientName(event.target.value)} className="mt-1.5 h-11 w-full rounded-lg border border-slate-300 px-3 font-normal" placeholder="Razão social ou nome fantasia" /></label><div className="text-sm font-semibold text-slate-700">CNC_CODE<div className="mt-1.5 flex h-11 items-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 font-mono text-sm font-normal text-slate-500">Gerado automaticamente</div></div></div><Button className="mt-5" onClick={() => createClient.mutate()} disabled={createClient.isPending || !newClientName.trim()}>{createClient.isPending ? "Criando cliente..." : "Criar cliente"}</Button>{createClient.isError && <ErrorState message="Não foi possível criar o cliente." />}</Card>
     </TabDropdown>
+    {tenantId && <TabDropdown title="Identificação do cliente selecionado" description="IDs usados em integrações, como o agent-config.seed.json do Connector."><Card className="max-w-3xl p-5"><div className="grid gap-4 sm:grid-cols-3">{[["ID do tenant", tenantId], ["Nome", tenantName || "—"], ["CNC_CODE (tenantSlug)", cncCode || "—"]].map(([label, value]) => <div key={label}><p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p><p className="mt-1 break-all font-mono text-sm text-slate-800">{value}</p></div>)}</div></Card></TabDropdown>}
     {tenantId && user?.role === "ADMIN" && <TabDropdown title="Usuários do cliente" description="Cadastre, edite e reenvie convites de acesso."><ClientUsersCard tenantId={tenantId} /></TabDropdown>}
+    {tenantId && canInstallConnector && <TabDropdown title="Identidade para o Connector portátil" description="Gere os dados de tenant e a identidade do Connector para o agent-config.seed.json."><ConnectorSeedCard tenantId={tenantId} tenantName={tenantName} tenantSlug={cncCode} /></TabDropdown>}
     </div>}
     {activeTab === "parameters" && <div role="tabpanel" className="max-w-5xl"><TabDropdown title="Serviços contratados" description="Defina as rotinas autorizadas para o cliente." defaultOpen>{tenantId && canInstallConnector ? <ClientServicesCard key={tenantId} tenantId={tenantId} /> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente e confirme seu perfil de administrador para configurar os serviços contratados.</Card>}</TabDropdown></div>}
     {activeTab === "connector" && <div role="tabpanel" className="max-w-5xl">
@@ -95,6 +97,26 @@ export default function CommercialPortal() {
 }
 
 function TabDropdown({ title, description, defaultOpen = false, children }: { title: string; description: string; defaultOpen?: boolean; children: React.ReactNode }) { return <details open={defaultOpen || undefined} className="group mb-4 overflow-hidden rounded-xl border border-slate-200 bg-white"><summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 marker:hidden"><div className="min-w-0 flex-1"><h2 className="font-bold text-slate-900">{title}</h2><p className="mt-0.5 text-sm text-slate-500">{description}</p></div><ChevronDown size={20} className="shrink-0 text-slate-500 transition-transform group-open:rotate-180" /></summary><div className="border-t border-slate-200 bg-slate-50 p-4 [&>section]:mb-0 [&>section]:max-w-none">{children}</div></details>; }
+
+function ConnectorSeedCard({ tenantId, tenantName, tenantSlug }: { tenantId: string; tenantName: string; tenantSlug: string }) {
+  const [machineName, setMachineName] = useState("");
+  const [identity, setIdentity] = useState<ConnectorIdentity>();
+  const [copied, setCopied] = useState(false);
+  const generate = useMutation({ mutationFn: () => commercialService.preRegisterConnector(machineName.trim() || undefined), onSuccess: (result) => { setIdentity(result); setCopied(false); } });
+  const seedFragment = identity ? JSON.stringify({ tenantId, tenantName, tenantSlug, connectorId: identity.connectorId, connectorClientId: identity.clientId, connectorClientSecret: identity.clientSecret }, null, 2) : "";
+  const copy = async () => { if (!seedFragment) return; await navigator.clipboard.writeText(seedFragment); setCopied(true); };
+  return <Card className="max-w-3xl p-5">
+    <div className="flex items-start gap-3"><KeyRound className="mt-0.5 shrink-0 text-blue-600" size={22} /><div><h2 className="font-bold text-slate-900">Identidade para o Connector portátil</h2><p className="mt-1 text-sm text-slate-500">Gera de uma vez os dados de tenant e a identidade do Connector, prontos para colar no <code className="rounded bg-slate-100 px-1 py-0.5 text-xs">agent-config.seed.json</code>, sem precisar rodar o Connector antes. O client secret só aparece aqui, uma única vez — não é possível recuperá-lo depois, apenas gerar uma nova identidade.</p></div></div>
+    <label className="mt-4 block max-w-sm text-sm font-semibold text-slate-700">Identificação da máquina (opcional)<input value={machineName} onChange={(event) => setMachineName(event.target.value)} className="mt-1.5 h-11 w-full rounded-lg border border-slate-300 px-3 font-normal" placeholder="Ex.: Notebook loja 3" /></label>
+    <Button className="mt-4" onClick={() => generate.mutate()} disabled={generate.isPending}>{generate.isPending ? "Gerando..." : "Gerar identidade do Connector"}</Button>
+    {generate.isError && <div className="mt-3"><ErrorState message="Não foi possível gerar a identidade do Connector." /></div>}
+    {identity && <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <p className="text-xs font-semibold uppercase text-slate-500">Pronto para colar no seed</p>
+      <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-md bg-white p-3 font-mono text-xs text-slate-700">{seedFragment}</pre>
+      <Button variant="secondary" className="mt-3" onClick={copy}><Copy size={16} />{copied ? "Copiado" : "Copiar bloco"}</Button>
+    </div>}
+  </Card>;
+}
 
 type ServiceDefinition = ClientServiceFlag & { description: string; input: string; output: string; implementation: boolean };
 const defaultClientServices: ServiceDefinition[] = [
