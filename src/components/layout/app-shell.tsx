@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, BookOpen, ChevronDown, ChevronLeft, Database, Gauge, ListChecks, LogOut, Menu, Moon, ShieldCheck, Store, Sun, Workflow, CreditCard, Code2, ClipboardCheck, X } from "lucide-react";
+import { Bell, BookOpen, ChevronDown, ChevronLeft, ClipboardList, Database, Gauge, ListChecks, LogOut, Menu, Moon, ShieldCheck, Store, Sun, Workflow, CreditCard, Code2, ClipboardCheck, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/providers";
@@ -23,6 +23,7 @@ const navigation = [
   { href: "/connector-queries", label: "Consultas do agente conector", icon: Code2, admin: true },
   { href: "/connector-data", label: "Cadastros importados", icon: Database },
   { href: "/catalog-review", label: "Revisão de cadastros", icon: ClipboardCheck, admin: true },
+  { href: "/adherence-plan", label: "Plano de aderência", icon: ClipboardList, admin: true },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
