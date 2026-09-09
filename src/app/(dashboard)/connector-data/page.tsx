@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Braces, Database, Eye, FileText, LoaderCircle, Sparkles, Trash2 } from "lucide-react";
+import { Braces, Database, Eye, FileText, LoaderCircle, Search, Sparkles, Trash2 } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
 import { connectorTransmissionsService, type ConnectorTransmission, type FieldSuggestion, type TransmissionPage, type TransmissionSummary, type ValidatedProduct } from "@/services/connector-transmissions.service";
-import { connectorDataService, extractionTypes, type ExtractionPage, type ExtractionSummary, type ExtractionType } from "@/services/connector-data.service";
+import { connectorDataService, extractionTypes, searchFieldByType, type ExtractionPage, type ExtractionSummary, type ExtractionType } from "@/services/connector-data.service";
 
 const issueLabels: Record<string, string> = { all: "Todos os itens", ok: "Itens sem pendência", ncm: "Itens com NCM pendente", cest: "Itens com CEST pendente", cst: "Itens com CST ICMS pendente", cfop: "Itens com CFOP pendente" };
 type OriginFilter = "ALL" | "API" | "SPED";
@@ -29,11 +29,14 @@ function InitialLoadData() {
   const qc = useQueryClient();
   const [entityType, setEntityType] = useState<ExtractionType | "">("");
   const [page, setPage] = useState(1);
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
   const [clearOpen, setClearOpen] = useState(false);
   const [clearPassword, setClearPassword] = useState("");
   const [clearReason, setClearReason] = useState("");
+  useEffect(() => { const timeout = setTimeout(() => setSearch(searchInput), 300); return () => clearTimeout(timeout); }, [searchInput]);
   const summary = useQuery({ queryKey: ["connector-data-summary"], queryFn: connectorDataService.summary });
-  const list = useQuery({ queryKey: ["connector-data-list", entityType, page], queryFn: () => connectorDataService.list(entityType as ExtractionType, page, 50), enabled: Boolean(entityType) });
+  const list = useQuery({ queryKey: ["connector-data-list", entityType, page, search], queryFn: () => connectorDataService.list(entityType as ExtractionType, page, 50, search), enabled: Boolean(entityType) });
   const clearAll = useMutation({
     mutationFn: () => connectorDataService.deleteTenantData(clearPassword, clearReason.trim() || undefined),
     onSuccess: async () => { setClearPassword(""); setClearOpen(false); setEntityType(""); setPage(1); await qc.invalidateQueries({ queryKey: ["connector-data-summary"] }); },
@@ -60,8 +63,9 @@ function InitialLoadData() {
       {clearAll.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(clearAll.error)} /></div>}
     </div>}
     {clearAll.isSuccess && <p role="status" className="mb-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800">Apagado: {clearAll.data.deletedRecords} registro(s), {clearAll.data.deletedCorrections} correção(ões) manual(is), {clearAll.data.deletedJobs} job(s), {clearAll.data.deletedBatches} lote(s), {clearAll.data.resetLoads} carga(s) inicial(is) zerada(s) e {clearAll.data.deletedCatalogApprovals} pendência(s) em /catalog-review. Rode uma nova carga inicial pelo Connector para repovoar.</p>}
-    {summary.isError ? <ErrorState message="Não foi possível carregar o resumo da carga inicial." /> : <InitialLoadSummaryCards summary={summary.data} loading={summary.isLoading} selected={entityType} select={(value) => { setEntityType(value); setPage(1); }} />}
-    {entityType && (list.isError ? <ErrorState message="Não foi possível carregar os registros desta consulta." /> : <InitialLoadRecordsTable entityType={entityType} data={list.data} loading={list.isLoading} page={page} setPage={setPage} />)}
+    {summary.isError ? <ErrorState message="Não foi possível carregar o resumo da carga inicial." /> : <InitialLoadSummaryCards summary={summary.data} loading={summary.isLoading} selected={entityType} select={(value) => { setEntityType(value); setPage(1); setSearchInput(""); setSearch(""); }} />}
+    {entityType && <label className="mb-4 flex h-10 max-w-sm items-center gap-2 rounded-lg border border-slate-300 px-3"><Search size={16} className="text-slate-400" /><input value={searchInput} onChange={(event) => { setSearchInput(event.target.value); setPage(1); }} placeholder={`Buscar por ${searchFieldByType[entityType].label.toLowerCase()} — ${searchFieldByType[entityType].placeholder}`} className="w-full bg-transparent text-sm outline-none" /></label>}
+    {entityType && (list.isError ? <ErrorState message="Não foi possível carregar os registros desta consulta." /> : <InitialLoadRecordsTable entityType={entityType} data={list.data} loading={list.isLoading} page={page} setPage={setPage} searchActive={Boolean(search.trim())} />)}
   </>;
 }
 
@@ -81,11 +85,11 @@ function InitialLoadSummaryCards({ summary, loading, selected, select }: { summa
   </section>;
 }
 
-function InitialLoadRecordsTable({ entityType, data, loading, page, setPage }: { entityType: ExtractionType; data?: ExtractionPage; loading: boolean; page: number; setPage: (page: number) => void }) {
+function InitialLoadRecordsTable({ entityType, data, loading, page, setPage, searchActive }: { entityType: ExtractionType; data?: ExtractionPage; loading: boolean; page: number; setPage: (page: number) => void; searchActive: boolean }) {
   const pages = Math.max(1, data?.totalPages ?? 1);
   return <Card className="mb-5 overflow-hidden">
     <div className="flex flex-wrap items-center gap-3 border-b bg-slate-50 px-5 py-4"><Database size={16} className="text-cyan-700" /><b className="text-sm text-slate-800">Registros recebidos · {entityType}</b><span className="ml-auto text-xs text-slate-500">{data?.total ?? 0} registro(s)</span></div>
-    {loading ? <p className="p-5 text-sm text-slate-500">Carregando registros...</p> : !data?.items.length ? <p className="p-5 text-sm text-slate-500">Nenhum registro recebido para esta consulta.</p> : <>
+    {loading ? <p className="p-5 text-sm text-slate-500">Carregando registros...</p> : !data?.items.length ? <p className="p-5 text-sm text-slate-500">{searchActive ? "Nenhum registro encontrado para esta busca." : "Nenhum registro recebido para esta consulta."}</p> : <>
       <div className="overflow-x-auto"><table className="w-full min-w-[720px] text-left text-sm"><thead><tr className="border-b text-xs uppercase text-slate-500"><th className="p-3">Chave de origem</th><th className="p-3">Alterado na origem</th><th className="p-3">Recebido</th><th className="p-3">Ação</th></tr></thead><tbody>
         {data.items.map(item => <tr className="border-b border-slate-100 align-top" key={item.id}>
           <td className="p-3 font-mono text-xs">{item.sourceKey}</td>

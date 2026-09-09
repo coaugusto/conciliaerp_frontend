@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Barcode, Boxes, Database, FileText, Pencil, Percent, PackageSearch, Save, Truck, X } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader, SeverityBadge, dateTime, money } from "@/components/shared/ui";
@@ -12,18 +12,22 @@ import { consincoField } from "@/services/consinco-field-map";
 
 export default function InitialLoadProductDetailPage() {
   const { productId } = useParams<{ productId: string }>();
+  const searchParams = useSearchParams();
   const id = decodeURIComponent(productId);
+  const fromAlerts = searchParams.get("from") === "alerts";
+  const backHref = fromAlerts ? "/alerts" : "/connector-data";
+  const backLabel = fromAlerts ? "Voltar aos alertas" : "Voltar aos cadastros importados";
   const detail = useQuery({ queryKey: ["fiscal-compliance-product", id], queryFn: () => fiscalComplianceService.product(id), enabled: Boolean(id), retry: false });
 
   if (detail.isLoading) return <div className="space-y-4"><div className="h-24 animate-pulse rounded-xl bg-slate-100" /><div className="h-72 animate-pulse rounded-xl bg-slate-100" /></div>;
-  if (detail.isError || !detail.data) return <><PageHeader title="Detalhes do produto" description="Cadastro recebido pela carga inicial do Connector." /><ErrorState message={detail.isError ? getApiErrorMessage(detail.error) : "A API respondeu sem os dados do produto."} /><Link href="/connector-data" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-cyan-700 hover:underline"><ArrowLeft size={16} />Voltar aos cadastros importados</Link></>;
+  if (detail.isError || !detail.data) return <><PageHeader title="Detalhes do produto" description="Cadastro recebido pela carga inicial do Connector." /><ErrorState message={detail.isError ? getApiErrorMessage(detail.error) : "A API respondeu sem os dados do produto."} /><Link href={backHref} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-cyan-700 hover:underline"><ArrowLeft size={16} />{backLabel}</Link></>;
 
   const data = detail.data;
   const product = data.product.payload;
   const description = text(product, "PRODUCT_DESCRIPTION") || data.product.sourceKey;
 
   return <>
-    <PageHeader title="Detalhes do produto" description="Cadastro e tributação recebidos pela carga inicial do Connector." action={<Link href="/connector-data" className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700"><ArrowLeft size={16} />Voltar</Link>} />
+    <PageHeader title="Detalhes do produto" description="Cadastro e tributação recebidos pela carga inicial do Connector." action={<Link href={backHref} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700"><ArrowLeft size={16} />{fromAlerts ? "Voltar aos alertas" : "Voltar"}</Link>} />
     <Card className="mb-5 border-cyan-200 bg-cyan-50/50 p-5"><div className="flex flex-wrap items-start justify-between gap-4"><div className="flex items-start gap-3"><PackageSearch className="mt-0.5 text-cyan-700" /><div><p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">Produto — {data.product.origin.query}</p><h2 className="mt-1 text-xl font-bold text-slate-900">{description}</h2><p className="mt-1 font-mono text-xs text-slate-500">Chave {data.product.sourceKey} · recebido {data.product.receivedAt ? dateTime(data.product.receivedAt) : "—"}</p></div></div></div></Card>
 
     {data.findings.length > 0 && <Card className="mb-5 overflow-hidden"><div className="border-b border-slate-200 p-4"><h2 className="font-bold text-slate-900">Pendências identificadas</h2></div><div className="grid gap-3 p-4">{data.findings.map(finding => <div key={finding.code} className="rounded-lg border border-slate-200 p-3"><div className="flex flex-wrap items-center gap-2"><SeverityBadge value={finding.severity} /><strong className="text-sm text-slate-900">{finding.reason}</strong>{!!finding.estimatedOverpayment && <span className="rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-semibold text-red-700">{money(finding.estimatedOverpayment)} pagos a mais (estimado)</span>}</div><p className="mt-1 text-sm text-slate-600">{finding.observation}</p><code className="mt-1 block text-xs text-slate-400">{finding.code}</code></div>)}</div></Card>}
@@ -43,7 +47,7 @@ export default function InitialLoadProductDetailPage() {
     <RecordSection icon={<Truck size={19} className="text-cyan-700" />} title="Fornecedores" entityType="FAMILY_SUPPLIERS_V1" records={data.suppliers} empty="Nenhum fornecedor recebido para esta família." queryId={id} />
     <RecordSection icon={<FileText size={19} className="text-cyan-700" />} title="Itens de nota fiscal (CST efetivamente declarado)" entityType="FISCAL_DOCUMENT_ITEMS_V1" records={data.documentItems} empty="Nenhum item de nota fiscal recebido ainda para este produto." queryId={id} />
 
-    {data.family.relatedProducts.length > 0 && <Card className="mt-5 overflow-hidden"><div className="border-b border-slate-200 p-4"><h2 className="font-bold text-slate-900">Outros produtos da mesma família</h2></div><div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-sm"><thead><tr className="border-b text-xs uppercase text-slate-500"><th className="p-3">Produto</th><th className="p-3">NCM</th></tr></thead><tbody>{data.family.relatedProducts.map(related => <tr key={related.productId} className="border-b border-slate-100"><td className="p-3"><Link href={`/connector-data/initial-load/products/${encodeURIComponent(related.productId)}`} className="text-blue-700 hover:underline">{related.description || related.productId}</Link></td><td className="p-3">{related.ncm || "—"}</td></tr>)}</tbody></table></div></Card>}
+    {data.family.relatedProducts.length > 0 && <Card className="mt-5 overflow-hidden"><div className="border-b border-slate-200 p-4"><h2 className="font-bold text-slate-900">Outros produtos da mesma família</h2></div><div className="overflow-x-auto"><table className="w-full min-w-[520px] text-left text-sm"><thead><tr className="border-b text-xs uppercase text-slate-500"><th className="p-3">Produto</th><th className="p-3">NCM</th></tr></thead><tbody>{data.family.relatedProducts.map(related => <tr key={related.productId} className="border-b border-slate-100"><td className="p-3"><Link href={`/connector-data/initial-load/products/${encodeURIComponent(related.productId)}${fromAlerts ? "?from=alerts" : ""}`} className="text-blue-700 hover:underline">{related.description || related.productId}</Link></td><td className="p-3">{related.ncm || "—"}</td></tr>)}</tbody></table></div></Card>}
   </>;
 }
 
