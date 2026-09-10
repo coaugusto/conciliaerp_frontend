@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ClipboardList, Printer, Search } from "lucide-react";
-import { Button, Card, ErrorState, PageHeader, dateTime } from "@/components/shared/ui";
+import { Button, Card, ErrorState, PageHeader, PageLoader, dateTime } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
 import { adherencePlanService, type AdherencePlanBankAccountGap, type AdherencePlanBudgetModel, type AdherencePlanCgoGap, type AdherencePlanCgoModel, type AdherencePlanItem, type AdherencePlanSection, type AdherencePlanSpeciesGap, type AdherencePlanSpeciesModel } from "@/services/adherence-plan.service";
 
@@ -85,7 +85,7 @@ export default function AdherencePlanPage() {
 
       <label className="mb-5 flex h-10 w-full max-w-md items-center gap-2 rounded-lg border border-slate-300 px-3 print:hidden"><Search size={16} className="text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full bg-transparent text-sm outline-none" placeholder="Buscar por processo ou item" /></label>
       <div className="print:hidden">
-        {result.isLoading ? <p className="text-sm text-slate-500">Carregando...</p> : !hasAnyData ? <EmptyPlan /> : !sections.length ? null : !visibleSections.length ? <p className="p-10 text-center text-sm text-slate-500">Nenhum processo corresponde à busca.</p> : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{visibleSections.map((section) => <SectionCard key={section.code} section={section} />)}</div>}
+        {result.isLoading ? <PageLoader/> : !hasAnyData ? <EmptyPlan /> : !sections.length ? null : !visibleSections.length ? <p className="p-10 text-center text-sm text-slate-500">Nenhum processo corresponde à busca.</p> : <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{visibleSections.map((section) => <SectionCard key={section.code} section={section} />)}</div>}
       </div>
     </>}
   </>;

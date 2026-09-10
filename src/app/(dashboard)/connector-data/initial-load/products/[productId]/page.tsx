@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Barcode, Boxes, Database, FileText, Pencil, Percent, PackageSearch, Save, Truck, X } from "lucide-react";
-import { Button, Card, ErrorState, PageHeader, SeverityBadge, dateTime, money } from "@/components/shared/ui";
+import { Button, Card, ErrorState, PageHeader, PageLoader, SeverityBadge, dateTime, money } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
 import { fiscalComplianceService, type ImportedRecord, type TaxationOperationGroup } from "@/services/fiscal-compliance.service";
 import { consincoField } from "@/services/consinco-field-map";
@@ -19,7 +19,7 @@ export default function InitialLoadProductDetailPage() {
   const backLabel = fromAlerts ? "Voltar aos alertas" : "Voltar aos cadastros importados";
   const detail = useQuery({ queryKey: ["fiscal-compliance-product", id], queryFn: () => fiscalComplianceService.product(id), enabled: Boolean(id), retry: false });
 
-  if (detail.isLoading) return <div className="space-y-4"><div className="h-24 animate-pulse rounded-xl bg-slate-100" /><div className="h-72 animate-pulse rounded-xl bg-slate-100" /></div>;
+  if (detail.isLoading) return <PageLoader label="Carregando cadastro do produto..." />;
   if (detail.isError || !detail.data) return <><PageHeader title="Detalhes do produto" description="Cadastro recebido pela carga inicial do Connector." /><ErrorState message={detail.isError ? getApiErrorMessage(detail.error) : "A API respondeu sem os dados do produto."} /><Link href={backHref} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-cyan-700 hover:underline"><ArrowLeft size={16} />{backLabel}</Link></>;
 
   const data = detail.data;

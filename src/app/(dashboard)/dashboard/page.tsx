@@ -2,7 +2,7 @@
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BellRing, Building2, CheckCircle2, CircleDot, Database, FileCheck2, FileClock, PackageCheck, PlugZap, ShieldCheck } from "lucide-react";
-import { Card, ErrorState, PageHeader, dateTime } from "@/components/shared/ui";
+import { Card, ErrorState, PageHeader, PageLoader, dateTime } from "@/components/shared/ui";
 import { dashboardService, type ImplementationStage } from "@/services/dashboard.service";
 
 const stageLabel:Record<ImplementationStage,string>={COMPLETED:"Concluído",IN_PROGRESS:"Em andamento",PENDING:"Pendente",BLOCKED:"Bloqueado"};
@@ -13,7 +13,7 @@ export default function Dashboard(){
   const identity=useQuery({queryKey:["dashboard","client-identity"],queryFn:dashboardService.clientIdentity});
   const {refetch:refetchIdentity}=identity;
   useEffect(()=>{const refresh=()=>refetchIdentity();window.addEventListener("concilia:tenant-changed",refresh);window.addEventListener("concilia:company-changed",refresh);return()=>{window.removeEventListener("concilia:tenant-changed",refresh);window.removeEventListener("concilia:company-changed",refresh);};},[refetchIdentity]);
-  if(summary.isLoading||identity.isLoading)return <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">{[1,2,3,4].map(item=><div key={item} className="h-32 animate-pulse rounded-xl bg-slate-200"/>)}</div>;
+  if(summary.isLoading||identity.isLoading)return <PageLoader/>;
   if(summary.isError||!summary.data||identity.isError||!identity.data)return <ErrorState/>;
   const data=summary.data,client=identity.data;
   const metrics=[

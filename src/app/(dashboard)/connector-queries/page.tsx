@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button, Card, ErrorState, PageHeader, StatusBadge } from "@/components/shared/ui";
+import { Button, Card, ErrorState, PageHeader, PageLoader, StatusBadge } from "@/components/shared/ui";
 import { connectorQueriesService, type ConnectorMonitoring, type ConnectorQuery } from "@/services/connector-queries.service";
 import { getApiErrorMessage } from "@/services/api/client";
 
@@ -16,7 +16,7 @@ export default function Page() {
   const remove=useMutation({mutationFn:(id:string)=>connectorQueriesService.remove(id),onSuccess:refresh,onError:e=>alert(getApiErrorMessage(e))});
   const activateLatest=useMutation({mutationFn:()=>connectorQueriesService.activateLatest(),onSuccess:(result)=>{refresh();alert(`${result.activated} consulta(s) ativada(s) na versão mais recente.`)},onError:e=>alert(getApiErrorMessage(e))});
   const deletePrevious=useMutation({mutationFn:()=>connectorQueriesService.deletePreviousVersions(),onSuccess:(result)=>{refresh();alert(`${result.deleted} versão(ões) anterior(es) excluída(s).`)},onError:e=>alert(getApiErrorMessage(e))});
-  if(queries.isLoading)return <Card className="p-8">Carregando...</Card>;
+  if(queries.isLoading)return <Card className="p-8"><PageLoader/></Card>;
   if(queries.isError)return <ErrorState message={getApiErrorMessage(queries.error)}/>;
   return <><PageHeader title="Consultas do Connector" description="Extrações, agendamentos e situação dos envios."/><Operations data={monitor.data} queries={queries.data??[]} initial={()=>setInitial(true)} configure={setForm} refresh={refresh}/>{monitor.isError&&<ErrorState message={getApiErrorMessage(monitor.error)}/>}
     <div className="mb-3 flex flex-wrap gap-2">
@@ -44,4 +44,27 @@ function Targets({value,set}:{value:string;set:(v:string)=>void}){const q=useQue
 
 function InitialLoad({close}:{close:()=>void}){const [connectorId,setConnectorId]=useState("");const companyId=typeof window==="undefined"?"":localStorage.getItem("concilia_company_id")??"";const run=useMutation({mutationFn:()=>connectorQueriesService.startInitialLoad(connectorId,companyId),onSuccess:close});return <Card className="mt-4 grid gap-3 border-cyan-200 p-4"><b>Carga inicial completa</b><Targets value={connectorId} set={setConnectorId}/>{run.isError&&<ErrorState message={getApiErrorMessage(run.error)}/>}<div><Button disabled={!connectorId||!companyId||run.isPending} onClick={()=>run.mutate()}>Iniciar carga</Button><Button className="ml-2" variant="secondary" onClick={close}>Cancelar</Button></div></Card>}
 
-function ScheduleForm({query,close}:{query:ConnectorQuery;close:()=>void}){const [connectorId,setConnectorId]=useState(""),[repeat,setRepeat]=useState(false),[frequency,setFrequency]=useState<"DAILY"|"HOURLY"|"MINUTES">("DAILY"),[minutes,setMinutes]=useState(60);const d=new Date(Date.now()+300000),[start,setStart]=useState(new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16));const companyId=typeof window==="undefined"?"":localStorage.getItem("concilia_company_id")??"";const save=useMutation({mutationFn:()=>repeat?connectorQueriesService.createRecurringSchedule(query.id,{connectorId,companyId,startAt:new Date(start).toISOString(),frequency,...(frequency==="MINUTES"?{intervalMinutes:minutes}:{})}):connectorQueriesService.schedule(query.id,connectorId,companyId),onSuccess:close});return <Card className="mt-4 grid gap-3 border-cyan-200 p-4"><b>{displayName(query.code)} v{query.version}</b><Targets value={connectorId} set={setConnectorId}/><label className="flex gap-2 text-sm"><input type="checkbox" checked={repeat} onChange={e=>setRepeat(e.target.checked)}/> Repetir automaticamente</label>{repeat&&<div className="grid gap-3 md:grid-cols-3"><input type="datetime-local" className="rounded border p-2" value={start} onChange={e=>setStart(e.target.value)}/><select className="rounded border p-2" value={frequency} onChange={e=>setFrequency(e.target.value as typeof frequency)}><option value="DAILY">Diária</option><option value="HOURLY">A cada hora</option><option value="MINUTES">Em minutos</option></select>{frequency==="MINUTES"&&<input type="number" min={1} max={1440} className="rounded border p-2" value={minutes} onChange={e=>setMinutes(Number(e.target.value))}/>}</div>}{save.isError&&<ErrorState message={getApiErrorMessage(save.error)}/>}<div><Button disabled={!connectorId||!companyId||save.isPending} onClick={()=>save.mutate()}>{repeat?"Salvar agendamento":"Executar uma vez"}</Button><Button className="ml-2" variant="secondary" onClick={close}>Cancelar</Button></div></Card>}
+// Parâmetros declarados pela consulta, além de updatedAfter (sempre com default automático de
+// sincronismo incremental — não faz sentido o operador digitar isso na mão). Deixados em branco,
+// cada um usa o default da consulta (geralmente "sem filtro"); preenchidos, viram um recorte —
+// ex.: postingFrom/postingTo + companyNumber pra importar uma empresa por período menor, em vez
+// de puxar tudo de uma vez.
+function customParameters(query: ConnectorQuery) { return query.parameters.filter(p => p.name.toLowerCase() !== "updatedafter"); }
+function ParameterInputs({ parameters, values, setValues }: { parameters: ConnectorQuery["parameters"]; values: Record<string, string>; setValues: (values: Record<string, string>) => void }) {
+  if (!parameters.length) return null;
+  return <div className="grid gap-3 rounded border bg-slate-50 p-3 md:grid-cols-3">
+    <p className="col-span-full text-xs uppercase text-slate-500">Filtros opcionais desta consulta — deixe em branco para não filtrar</p>
+    {parameters.map(param => <label key={param.name} className="grid gap-1 text-xs font-semibold text-slate-700">
+      {param.name}
+      <input
+        type={param.type === "datetime" ? "date" : param.type === "number" ? "number" : "text"}
+        className="h-9 rounded border border-slate-300 px-2 font-normal"
+        value={values[param.name] ?? ""}
+        onChange={e => setValues({ ...values, [param.name]: e.target.value })}
+        placeholder={param.required ? "obrigatório" : "sem filtro"}
+      />
+    </label>)}
+  </div>;
+}
+
+function ScheduleForm({query,close}:{query:ConnectorQuery;close:()=>void}){const [connectorId,setConnectorId]=useState(""),[repeat,setRepeat]=useState(false),[frequency,setFrequency]=useState<"DAILY"|"HOURLY"|"MINUTES">("DAILY"),[minutes,setMinutes]=useState(60),[paramValues,setParamValues]=useState<Record<string,string>>({});const [start,setStart]=useState(()=>{const d=new Date(Date.now()+300000);return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);});const companyId=typeof window==="undefined"?"":localStorage.getItem("concilia_company_id")??"";const parameters=Object.fromEntries(Object.entries(paramValues).filter(([,value])=>value.trim()!==""));const save=useMutation({mutationFn:()=>repeat?connectorQueriesService.createRecurringSchedule(query.id,{connectorId,companyId,startAt:new Date(start).toISOString(),frequency,parameters,...(frequency==="MINUTES"?{intervalMinutes:minutes}:{})}):connectorQueriesService.schedule(query.id,connectorId,companyId,parameters),onSuccess:close});return <Card className="mt-4 grid gap-3 border-cyan-200 p-4"><b>{displayName(query.code)} v{query.version}</b><Targets value={connectorId} set={setConnectorId}/><ParameterInputs parameters={customParameters(query)} values={paramValues} setValues={setParamValues}/><label className="flex gap-2 text-sm"><input type="checkbox" checked={repeat} onChange={e=>setRepeat(e.target.checked)}/> Repetir automaticamente</label>{repeat&&<div className="grid gap-3 md:grid-cols-3"><input type="datetime-local" className="rounded border p-2" value={start} onChange={e=>setStart(e.target.value)}/><select className="rounded border p-2" value={frequency} onChange={e=>setFrequency(e.target.value as typeof frequency)}><option value="DAILY">Diária</option><option value="HOURLY">A cada hora</option><option value="MINUTES">Em minutos</option></select>{frequency==="MINUTES"&&<input type="number" min={1} max={1440} className="rounded border p-2" value={minutes} onChange={e=>setMinutes(Number(e.target.value))}/>}</div>}{save.isError&&<ErrorState message={getApiErrorMessage(save.error)}/>}<div><Button disabled={!connectorId||!companyId||save.isPending} onClick={()=>save.mutate()}>{repeat?"Salvar agendamento":"Executar uma vez"}</Button><Button className="ml-2" variant="secondary" onClick={close}>Cancelar</Button></div></Card>}

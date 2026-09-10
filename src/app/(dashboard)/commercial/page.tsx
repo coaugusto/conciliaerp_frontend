@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Check, ChevronDown, Copy, Download, KeyRound, Play, RefreshCw, Settings2, ShieldCheck, Trash2, X } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Button, Card, ErrorState, PageHeader } from "@/components/shared/ui";
+import { Button, Card, ErrorState, PageHeader, PageLoader } from "@/components/shared/ui";
 import { commercialService, type ClientServiceCode, type ClientServiceFlag, type ConnectorIdentity } from "@/services/commercial.service";
 import { connectorDesktopService } from "@/services/connector-desktop.service";
 import { api, getApiErrorMessage, type ApiResponse } from "@/services/api/client";
@@ -74,7 +74,7 @@ export default function CommercialPortal() {
         <div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 shrink-0 text-cyan-700" size={24} /><div><p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">Agente local</p><h2 className="mt-1 text-lg font-bold text-slate-900">Concilia ERP Connector para Windows</h2><p className="mt-1 max-w-xl text-sm text-slate-500">Instale no servidor ou computador que possui acesso ao ERP. Depois, gere a chave abaixo e use-a no primeiro acesso para vincular o agente ao cliente selecionado.</p>{connectorRelease.data?.available && <p className="mt-3 break-all text-xs text-slate-500">Versão {connectorRelease.data.version} · Windows {connectorRelease.data.architecture}{connectorRelease.data.sha256 ? ` · SHA-256 ${connectorRelease.data.sha256}` : ""}</p>}{connectorRelease.data && !connectorRelease.data.available && <p className="mt-3 text-sm text-amber-700">{connectorRelease.data.message}</p>}</div></div>
         {connectorRelease.data?.downloadUrl && <a href={connectorRelease.data.downloadUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md bg-[#075d70] px-4 text-sm font-semibold text-white transition hover:bg-[#064e5e]"><Download size={16} />Baixar instalador</a>}
       </div>
-      {connectorRelease.isLoading && <p className="mt-4 text-sm text-slate-500">Consultando a versão disponível...</p>}
+      {connectorRelease.isLoading && <PageLoader label="Consultando a versão disponível..."/>}
       {connectorRelease.isError && <div className="mt-4"><ErrorState message="O instalador ainda não foi publicado. Solicite a publicação ao administrador do Concilia ERP." /></div>}
     </Card>
     </TabDropdown>
@@ -174,7 +174,7 @@ function ConnectorJobsCard({ tenantId, companyId }: { tenantId: string; companyI
   const [resetPassword, setResetPassword] = useState("");
   const [resetReason, setResetReason] = useState("");
   const reset = useMutation({ mutationFn: (loadId:string) => connectorInitialLoadsService.reset(loadId, resetPassword, resetReason.trim() || undefined), onSuccess: () => { setResetPassword(""); setResetOpen(false); refresh(); } });
-  if (panel.isLoading) return <Card className="p-6 text-sm text-slate-500">Carregando cargas e jobs...</Card>;
+  if (panel.isLoading) return <Card className="p-6"><PageLoader label="Carregando cargas e jobs..."/></Card>;
   if (panel.isError) return <Card className="p-5"><ErrorState message={`Não foi possível consultar as cargas do Connector: ${getApiErrorMessage(panel.error)}`} /><Button className="mt-3" variant="secondary" onClick={()=>panel.refetch()} disabled={panel.isFetching}><RefreshCw size={16} className={panel.isFetching?"animate-spin":""}/>{panel.isFetching?"Consultando...":"Tentar novamente"}</Button></Card>;
   if (!panel.data) return <Card className="p-5"><ErrorState message="A API respondeu sem os dados de cargas do Connector." /><Button className="mt-3" variant="secondary" onClick={()=>panel.refetch()} disabled={panel.isFetching}><RefreshCw size={16} className={panel.isFetching?"animate-spin":""}/>{panel.isFetching?"Consultando...":"Tentar novamente"}</Button></Card>;
   const data = panel.data;

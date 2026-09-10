@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Database } from "lucide-react";
-import { Card, ErrorState, PageHeader, dateTime } from "@/components/shared/ui";
+import { Card, ErrorState, PageHeader, PageLoader, dateTime } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
 import { connectorDataService, extractionTypes } from "@/services/connector-data.service";
 import { consincoField } from "@/services/consinco-field-map";
@@ -14,7 +14,7 @@ export default function InitialLoadRecordDetailPage() {
   const recordId = decodeURIComponent(id);
   const record = useQuery({ queryKey: ["connector-data-record", recordId], queryFn: () => connectorDataService.record(recordId), enabled: Boolean(recordId), retry: false });
 
-  if (record.isLoading) return <div className="space-y-4"><div className="h-24 animate-pulse rounded-xl bg-slate-100" /><div className="h-72 animate-pulse rounded-xl bg-slate-100" /></div>;
+  if (record.isLoading) return <PageLoader label="Carregando registro..." />;
   if (record.isError || !record.data) return <><PageHeader title="Detalhes do registro importado" description="Registro recebido pela carga inicial do Connector." /><ErrorState message={record.isError ? getApiErrorMessage(record.error) : "A API respondeu sem os dados do registro."} /><Link href="/connector-data" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-cyan-700 hover:underline"><ArrowLeft size={16} />Voltar aos cadastros importados</Link></>;
 
   const item = record.data;

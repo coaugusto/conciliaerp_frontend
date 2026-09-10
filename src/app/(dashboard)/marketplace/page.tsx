@@ -14,7 +14,7 @@ import {
   Sparkles,
   Upload,
 } from "lucide-react";
-import { Button, Card, ErrorState, PageHeader } from "@/components/shared/ui";
+import { Button, Card, ErrorState, PageHeader, PageLoader } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
 import { useAuth } from "@/providers/providers";
 import {
@@ -229,9 +229,7 @@ export default function Marketplace() {
         </label>
       </Card>
       {catalog.isLoading ? (
-        <p className="p-8 text-sm text-slate-500">
-          Carregando Catálogo Central...
-        </p>
+        <PageLoader label="Carregando Catálogo Central..."/>
       ) : catalog.isError ? (
         <ErrorState message="Não foi possível consultar o Catálogo Central." />
       ) : (

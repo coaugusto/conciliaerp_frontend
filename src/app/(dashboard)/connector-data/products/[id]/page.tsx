@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Database, FileText, PackageSearch } from "lucide-react";
-import { Card, ErrorState, PageHeader, dateTime } from "@/components/shared/ui";
+import { Card, ErrorState, PageHeader, PageLoader, dateTime } from "@/components/shared/ui";
 import { connectorTransmissionsService } from "@/services/connector-transmissions.service";
 
 export default function ConnectorProductDetailPage() {
@@ -12,7 +12,7 @@ export default function ConnectorProductDetailPage() {
   const recordId = decodeURIComponent(id);
   const record = useQuery({ queryKey: ["connector-transmission-record", recordId], queryFn: () => connectorTransmissionsService.record(recordId), enabled: Boolean(recordId), retry: false });
 
-  if (record.isLoading) return <div className="space-y-4"><div className="h-24 animate-pulse rounded-xl bg-slate-100" /><div className="h-72 animate-pulse rounded-xl bg-slate-100" /></div>;
+  if (record.isLoading) return <PageLoader label="Carregando cadastro do produto..." />;
   if (record.isError || !record.data) return <><PageHeader title="Detalhes do produto importado" description="Registro recebido pelo Connector." /><ErrorState message="Não foi possível carregar este produto. O registro pode não existir ou não pertencer ao cliente selecionado." /><Link href="/connector-data" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-cyan-700 hover:underline"><ArrowLeft size={16} />Voltar aos cadastros importados</Link></>;
 
   const item = record.data;

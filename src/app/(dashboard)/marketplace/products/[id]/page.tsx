@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Database, Edit3, Link2, Receipt, Save, Search, Sparkles, X } from "lucide-react";
-import { Button, Card, ErrorState, PageHeader } from "@/components/shared/ui";
+import { Button, Card, ErrorState, InlineLoader, PageHeader, PageLoader } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
 import { useAuth } from "@/providers/providers";
 import { clientContextService } from "@/services/client-context.service";
@@ -67,7 +67,7 @@ export default function MasterCatalogProductDetailPage() {
   const aiEnrich = useMutation({ mutationFn: () => catalogReviewService.aiEnrich([productId]), onSuccess: refresh });
   const companyState = useSelectedCompanyState();
 
-  if (product.isLoading) return <div className="space-y-4"><div className="h-24 animate-pulse rounded-xl bg-slate-100" /><div className="h-72 animate-pulse rounded-xl bg-slate-100" /></div>;
+  if (product.isLoading) return <PageLoader label="Carregando cadastro do produto..." />;
   if (product.isError || !product.data) return <><PageHeader title="Detalhes do produto" description="Produto do Catálogo Central." /><ErrorState message="Não foi possível carregar este produto." /><Link href="/marketplace" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-cyan-700 hover:underline"><ArrowLeft size={16} />Voltar ao Catálogo Central</Link></>;
 
   const item = product.data;
@@ -216,7 +216,7 @@ function TaxationSuggestions({ productId, onAccept }: { productId: string; onAcc
         {!enabled && <Button variant="secondary" onClick={() => setEnabled(true)}><Sparkles size={15} />Gerar sugestão</Button>}
       </div>
       <p className="mt-1 text-xs text-slate-500">Busca produtos reais parecidos (mesmo NCM, prefixo de NCM ou categoria) já tributados no catálogo; só usa IA — para escolher entre tributações reais mais amplas, nunca para inventar uma — quando nada disso encontra nada. Nunca cria dado novo sem base real.</p>
-      {enabled && suggestions.isLoading && <p className="mt-2 text-xs text-slate-500">Buscando sugestão...</p>}
+      {enabled && suggestions.isLoading && <div className="mt-2"><InlineLoader label="Buscando sugestão..."/></div>}
       {enabled && suggestions.isError && <p className="mt-2 text-xs text-red-700">Não foi possível gerar sugestão.</p>}
       {enabled && !suggestions.isLoading && !visibleSuggestions.length && <p className="mt-2 text-xs text-slate-500">{suggestions.data?.length ? "Sugestão aceita." : "Nenhuma sugestão disponível — não há nenhum produto parecido nem nenhuma tributação real no catálogo que a IA pudesse indicar. Nada foi inventado."}</p>}
       {!!visibleSuggestions.length && (
@@ -264,7 +264,7 @@ function TaxationLinkPicker({ linkedIds, onLink, linking, error }: { linkedIds: 
         <input value={query} onChange={(event) => { setQuery(event.target.value); setSelected(null); }} placeholder="Nome da tributação, ex.: Venda dentro do Estado" className="h-9 flex-1 rounded-md border border-slate-300 px-2 text-sm" />
         <Button variant="secondary" onClick={() => setSearched(true)} disabled={!query.trim()}><Search size={15} />Buscar</Button>
       </div>
-      {results.isFetching && <p className="mt-2 text-xs text-slate-500">Buscando...</p>}
+      {results.isFetching && <div className="mt-2"><InlineLoader label="Buscando..."/></div>}
       {results.isError && <p className="mt-2 text-xs text-red-700">Não foi possível buscar tributações.</p>}
       {searched && !results.isFetching && !results.data?.length && <p className="mt-2 text-xs text-slate-500">Nenhuma tributação encontrada para este nome.</p>}
       {!!results.data?.length && (

@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ChevronDown, ChevronRight, Folder, FolderOpen, Package } from "lucide-react";
-import { Button, Card, ErrorState, PageHeader } from "@/components/shared/ui";
+import { Button, Card, ErrorState, PageHeader, PageLoader } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
 import { masterCatalogCategoryService, type CategoryNode } from "@/services/master-catalog-category.service";
 
@@ -60,7 +60,7 @@ export default function CategoryTreePage() {
       <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
         <Card className="overflow-hidden">
           <div className="border-b border-slate-200 p-4"><h2 className="font-bold text-slate-900">Árvore de categorias</h2></div>
-          {tree.isLoading ? <div className="space-y-2 p-4">{[1, 2, 3].map((item) => <div key={item} className="h-6 animate-pulse rounded bg-slate-100" />)}</div>
+          {tree.isLoading ? <PageLoader/>
             : !roots.length ? <p className="p-4 text-sm text-slate-500">Nenhuma categoria ainda — a árvore é montada automaticamente conforme os clientes sincronizam dados de classificação mercadológica pelo Connector.</p>
             : <ul className="max-h-[70vh] overflow-y-auto p-2 text-sm">{roots.map((node) => <TreeItem key={node.id} node={node} depth={0} expanded={expanded} onToggle={toggle} selectedId={selectedId} onSelect={selectLeaf} onDrop={handleDrop} dragActive={Boolean(dragProductId)} />)}</ul>}
         </Card>
@@ -68,7 +68,7 @@ export default function CategoryTreePage() {
           <div className="border-b border-slate-200 p-4"><h2 className="font-bold text-slate-900">Produtos</h2><p className="mt-0.5 text-xs text-slate-500">{selectedId ? nodesById.get(selectedId)?.name : "Selecione uma categoria-folha na árvore para ver os produtos vinculados."}</p></div>
           {dropError && <div className="border-b border-slate-200 p-4"><ErrorState message={dropError} /></div>}
           {!selectedId ? <p className="p-8 text-center text-sm text-slate-500">Nenhuma categoria selecionada.</p>
-            : products.isLoading ? <div className="space-y-2 p-4">{[1, 2, 3].map((item) => <div key={item} className="h-10 animate-pulse rounded bg-slate-100" />)}</div>
+            : products.isLoading ? <PageLoader/>
             : products.isError ? <ErrorState message="Não foi possível carregar os produtos desta categoria." />
             : !products.data?.items.length ? <p className="p-8 text-center text-sm text-slate-500">Nenhum produto vinculado a esta categoria.</p>
             : <>

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, ExternalLink, FileCheck2, Info, Search, ShieldCheck, X } from "lucide-react";
-import { Button, Card, ErrorState, PageHeader } from "@/components/shared/ui";
+import { Button, Card, ErrorState, PageHeader, PageLoader } from "@/components/shared/ui";
 import { validationRulesService, type ValidationRule } from "@/services/validation-rules.service";
 
 const categories = { ALL: "Todas", CADASTRAL: "Cadastrais", FISCAL: "Fiscais", SPED: "SPED", REFORM: "Reforma", DOCUMENT: "Documentos", RELATIONSHIP: "Relacionamentos" } as const;
@@ -31,7 +31,7 @@ export default function ValidationRulesPage() {
     <PageHeader title="Regras de validação" description="Entenda o que o ConciliaERP verifica e quando cada pendência é gerada." />
     <Card className="mb-5 flex max-w-6xl flex-wrap items-center gap-3 p-4"><label className="flex h-10 min-w-64 flex-1 items-center gap-2 rounded-lg border border-slate-300 px-3"><Search size={16} className="text-slate-400" /><input value={search} onChange={(event) => setSearch(event.target.value)} className="w-full bg-transparent text-sm outline-none" placeholder="Pesquisar regra ou entidade" /></label><div className="flex flex-wrap gap-2">{Object.entries(categories).map(([value, label]) => <Button key={value} variant={category === value ? "primary" : "secondary"} onClick={() => setCategory(value as keyof typeof categories)}>{label}</Button>)}</div></Card>
     <div className="mb-5 grid max-w-6xl gap-3 sm:grid-cols-2 lg:grid-cols-4"><Summary label="Regras cadastradas" value={rules.data?.length ?? 0} icon="shield" /><Summary label="Ativas (dado real)" value={rules.data?.filter((rule) => rule.enforcement === "LIVE").length ?? 0} icon="check" /><Summary label="Implementadas, sem fonte de dado" value={rules.data?.filter((rule) => rule.enforcement === "ORPHANED").length ?? 0} icon="pending" /><Summary label="Críticas ou altas" value={rules.data?.filter((rule) => rule.severity === "CRITICAL" || rule.severity === "HIGH").length ?? 0} icon="alert" /></div>
-    {rules.isLoading ? <div className="max-w-6xl space-y-3">{[1,2,3].map((item) => <div key={item} className="h-28 animate-pulse rounded-xl bg-slate-100" />)}</div> : <div className="max-w-6xl space-y-3">{visible.map((rule, index) => <RuleCard key={rule.id} rule={rule} defaultOpen={index === 0} />)}{!visible.length && <Card className="p-10 text-center text-sm text-slate-500">Nenhuma regra corresponde aos filtros.</Card>}</div>}
+    {rules.isLoading ? <PageLoader/> : <div className="max-w-6xl space-y-3">{visible.map((rule, index) => <RuleCard key={rule.id} rule={rule} defaultOpen={index === 0} />)}{!visible.length && <Card className="p-10 text-center text-sm text-slate-500">Nenhuma regra corresponde aos filtros.</Card>}</div>}
   </>;
 }
 
