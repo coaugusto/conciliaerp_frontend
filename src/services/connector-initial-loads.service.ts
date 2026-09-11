@@ -2,7 +2,7 @@ import { api, type ApiResponse } from "./api/client";
 import type { ConnectorAgent } from "./connector-agent";
 
 export type ConnectorInitialLoad = { id:string; companyId:string; connectorId:string; status:string; createdAt:string; updatedAt:string };
-export type ConnectorLoadJob = { id:string; initialLoadId?:string|null; companyId?:string|null; connectorId:string; queryCode:string; queryVersion:number; status:string; requestedAt:string; dispatchedAt?:string|null; completedAt?:string|null; expiresAt:string; errorCode?:string|null; errorMessage?:string|null };
+export type ConnectorLoadJob = { id:string; initialLoadId?:string|null; companyId?:string|null; connectorId:string; queryCode:string; queryVersion:number; status:string; parameters?:Record<string,unknown>|null; requestedAt:string; dispatchedAt?:string|null; completedAt?:string|null; expiresAt:string; errorCode?:string|null; errorMessage?:string|null };
 export type ConnectorLoadPanel = { connectors:ConnectorAgent[]; companies:Array<{id:string;legalName:string;tradeName?:string|null;document:string;state?:string|null}>; selectedCompanyId?:string|null; loads:ConnectorInitialLoad[]; jobs:ConnectorLoadJob[]; summary:{total:number;pending:number;running:number;completed:number;failed:number;byStatus:Record<string,number>} };
 
 function unwrap<T>(payload: ApiResponse<T> | T): T {

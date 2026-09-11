@@ -5,11 +5,25 @@ export type ConnectorQueryParameter = { name: string; type: string; required: bo
 export type ConnectorQuery = { id: string; code: string; version: number; description: string; sqlPreview: string; sha256: string; parameters: ConnectorQueryParameter[]; timeoutSeconds: number; maxRows: number; batchSize: number; enabled: boolean; syncWithConnector: boolean };
 export type ConnectorQueryCoverage={ready:boolean;operationLevelValidationReady:boolean;coveragePercent:number;queries:Array<{code:string;purpose:string;exists:boolean;version?:number;enabled:boolean;approvedForConnector:boolean;missingRequired:string[];missingRecommended:string[];ready:boolean}>};
 export type ConnectorInitialLoad = { id: string; status: string; scheduledJobs: number };
-export type ConnectorJob = { id: string; connectorId: string; companyId?: string | null; queryCode: string; queryVersion: number; status: string; requestedAt: string; dispatchedAt?: string | null; completedAt?: string | null; expiresAt: string; errorCode?: string | null; errorMessage?: string | null; recordCount: number };
+export type ConnectorJob = { id: string; connectorId: string; companyId?: string | null; queryCode: string; queryVersion: number; status: string; parameters?: Record<string, unknown> | null; requestedAt: string; dispatchedAt?: string | null; completedAt?: string | null; expiresAt: string; errorCode?: string | null; errorMessage?: string | null; recordCount: number };
 export type ConnectorCapability = { connectorId: string; queryCode: string; queryVersion: number; sha256: string; enabled: boolean; reportedAt: string };
 export type ConnectorSchedule = { id: string; connectorId: string; companyId: string; queryCode: string; queryVersion: number; frequency: "DAILY" | "HOURLY" | "MINUTES"; intervalMinutes?: number | null; nextRunAt: string; lastRunAt?: string | null; active: boolean };
 export type ConnectorLastExecution = { id: string; queryCode: string; queryVersion: number; completedAt: string; recordCount: number; connectorId: string; companyId?: string | null };
 export type ConnectorMonitoring = { connectors: ConnectorAgent[]; capabilities: ConnectorCapability[]; jobs: ConnectorJob[]; schedules: ConnectorSchedule[]; lastExecution: ConnectorLastExecution | null };
+
+// Resume, para a lista de execuções, o recorte de data/empresa com que o job foi disparado —
+// hoje só a FISCAL_DOCUMENT_ITEMS_V1 declara postingFrom/postingTo/companyNumber, mas a função
+// não depende do código da consulta para funcionar com qualquer consulta que venha a usar os
+// mesmos nomes de parâmetro.
+export function jobScopeLabel(parameters?: Record<string, unknown> | null): string | null {
+  if (!parameters) return null;
+  const from = parameters["postingFrom"], to = parameters["postingTo"], company = parameters["companyNumber"];
+  const parts: string[] = [];
+  const asDate = (value: unknown) => { const d = new Date(String(value)); return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleDateString("pt-BR"); };
+  if (from != null || to != null) parts.push(`Período: ${from != null ? asDate(from) : "?"} – ${to != null ? asDate(to) : "?"}`);
+  if (company != null && company !== "") parts.push(`Empresa: ${company}`);
+  return parts.length ? parts.join(" · ") : null;
+}
 
 export const connectorQueriesService = {
   list: async () => (await api.get<ApiResponse<ConnectorQuery[]>>("/connector-queries")).data.data,
