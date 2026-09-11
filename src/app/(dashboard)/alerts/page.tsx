@@ -16,7 +16,10 @@ const severityStyle:Record<FiscalAlertSeverity,string>={CRITICAL:"border-red-300
 
 export default function FiscalAlertsPage(){
   const importInput=useRef<HTMLInputElement>(null);
-  const alerts=useQuery({queryKey:["fiscal-alerts","summary"],queryFn:fiscalAlertsService.summary});
+  // gcTime alto o bastante pra sobreviver a uma navegação pra outra tela enquanto o cálculo do
+  // cache frio ainda está rodando (ver background-completion-notifier.tsx) — sem isso, o
+  // React Query poderia descartar a consulta antes dela terminar e a aba nunca piscaria.
+  const alerts=useQuery({queryKey:["fiscal-alerts","summary"],queryFn:fiscalAlertsService.summary,gcTime:30*60*1000});
   const validation=useMutation({mutationFn:fiscalAlertsService.scanCatalog,onSuccess:async()=>{await alerts.refetch();}});
   const exportWorkbook=useMutation({mutationFn:()=>exportAlertsWorkbook(alerts.data??[])});
   const importWorkbook=useMutation({

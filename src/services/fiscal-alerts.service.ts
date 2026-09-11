@@ -10,7 +10,11 @@ export type QueueFiscalAdjustmentInput={groupId:string;itemId:string;field:strin
 export type FiscalCorrectionRow=Record<string,string|number|null>;
 export type FiscalCorrectionBatch={id:string;status:"VALIDATED"|"VALIDATION_FAILED"|"QUEUED_FOR_ERP";totalRows:number;validRows:number;invalidRows:number;validationRate:number;errors:Array<{rowNumber:number;errors:string[]}>};
 export const fiscalAlertsService={
-  summary:async()=>(await api.get<ApiResponse<FiscalAlertGroup[]>>("/alerts/fiscal-summary",{timeout:60_000})).data.data,
+  // Num tenant grande com o cache do backend frio, esse cálculo pode levar alguns minutos
+  // (fiscal-alerts-summary.service.ts) — 60s cortava a resposta antes de terminar mesmo com a
+  // aba aberta e olhando pra tela. Generoso o bastante pro pior caso medido (~4,5min) com folga,
+  // sem deixar de ter algum limite.
+  summary:async()=>(await api.get<ApiResponse<FiscalAlertGroup[]>>("/alerts/fiscal-summary",{timeout:360_000})).data.data,
   queueAdjustment:async(input:QueueFiscalAdjustmentInput)=>(await api.post<ApiResponse<{id:string;status:string}>>("/alerts/fiscal-adjustments/integration-queue",input)).data.data,
   scanCatalog:async()=>(await api.post<ApiResponse<{id:string;analyzed:number;withSuggestions:number}>>("/fiscal-validation/catalog-review/scan-alerts")).data.data,
   correctionRows:async()=>(await api.get<ApiResponse<FiscalCorrectionRow[]>>("/fiscal-validation/catalog-review/export")).data.data,

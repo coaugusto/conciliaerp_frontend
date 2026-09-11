@@ -2,6 +2,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { api, type ApiResponse } from "@/services/api/client";
+import { BackgroundCompletionNotifier } from "@/components/layout/background-completion-notifier";
 
 export type User = { name:string; email:string; role:"ADMIN"|"COMPANY_ADMIN"|"ANALYST"; mustChangePassword?:boolean; jobTitle?:string|null; phone?:string|null };
 type Theme = "light"|"dark";
@@ -38,6 +39,6 @@ export function Providers({children}:{children:React.ReactNode}) {
   const changePassword=async(currentPassword:string,newPassword:string)=>{await api.post("/auth/change-password",{currentPassword,newPassword});if(user)persistUser({...user,mustChangePassword:false});};
   const updateProfile=async(profile:Pick<User,"name"|"jobTitle"|"phone">)=>{const next=(await api.patch<ApiResponse<Pick<User,"name"|"email"|"jobTitle"|"phone">>>("/access-profile/me",profile)).data.data;if(user)persistUser({...user,...next});};
   const toggleTheme=()=>setTheme(current=>current==="dark"?"light":"dark");
-  return <QueryClientProvider client={client}><AuthContext.Provider value={{user:hydrated?user:null,hydrated,login,logout,changePassword,updateProfile,theme:hydrated?theme:"light",toggleTheme}}>{children}</AuthContext.Provider></QueryClientProvider>;
+  return <QueryClientProvider client={client}><AuthContext.Provider value={{user:hydrated?user:null,hydrated,login,logout,changePassword,updateProfile,theme:hydrated?theme:"light",toggleTheme}}><BackgroundCompletionNotifier />{children}</AuthContext.Provider></QueryClientProvider>;
 }
 export const useAuth=()=>{const value=useContext(AuthContext);if(!value)throw new Error("AuthProvider ausente");return value;};
