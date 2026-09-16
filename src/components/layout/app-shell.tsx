@@ -2,46 +2,49 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, BookOpen, ChevronDown, ChevronLeft, ClipboardList, Database, Gauge, ListChecks, LogOut, Menu, Moon, ShieldCheck, Store, Sun, Workflow, CreditCard, Code2, ClipboardCheck, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Bell, BookOpen, ChevronDown, ChevronLeft, LogOut, Menu, MoreVertical, Moon, Sun, X } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/providers/providers";
 import { cn } from "@/utils/cn";
 import { api, type ApiResponse } from "@/services/api/client";
 import { clientContextService } from "@/services/client-context.service";
+import { navigation } from "./navigation";
+import { TabLink } from "./tab-link";
+import { TabViewport } from "./tab-viewport";
+import { TabsProvider } from "@/providers/tabs-provider";
 
 type ClientTenant = { id: string; name: string; cncCode: string };
 
-const navigation = [
-  { href: "/dashboard", label: "Painel de conciliações", icon: Gauge },
-  { href: "/commercial", label: "Portal do Cliente", icon: CreditCard },
-  { href: "/marketplace", label: "Catálogo mestre", icon: Store },
-  { href: "/consinco", label: "Integração Consinco", icon: Workflow, admin: true },
-  { href: "/alerts", label: "Alertas", icon: Bell },
-  { href: "/rules", label: "Regras", icon: ListChecks, admin: true },
-  { href: "/connections", label: "Conexões ERP", icon: ShieldCheck, admin: true },
-  { href: "/connector-queries", label: "Consultas do agente conector", icon: Code2, admin: true },
-  { href: "/connector-data", label: "Cadastros importados", icon: Database },
-  { href: "/catalog-review", label: "Revisão de cadastros", icon: ClipboardCheck, admin: true },
-  { href: "/adherence-plan", label: "Plano de aderência", icon: ClipboardList, admin: true },
-];
-
-export function AppShell({ children }: { children: React.ReactNode }) {
+// `children` (a rota que o Next resolveu para a URL atual) não é mais usado como conteúdo — quem
+// decide o que aparece é o TabViewport (registro de abas). O prop continua aceito pela assinatura
+// exigida por (dashboard)/layout.tsx, mas é ignorado de propósito.
+export function AppShell({ children: _children }: { children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const { user, hydrated, logout, theme, toggleTheme } = useAuth();
   const tenants = useQuery({ queryKey: ["client-tenants"], queryFn: async () => (await api.get<ApiResponse<ClientTenant[]>>("/auth/tenants")).data.data, enabled: !!user });
   const [tenantId, setTenantId] = useState(() => typeof window === "undefined" ? "" : localStorage.getItem("concilia_tenant_id") ?? "");
-  // O ambiente selecionado precisa ficar visível na barra do header em toda tela — sem isso, o
-  // campo aparecia em branco (mesmo com o tenant continuando ativo por trás), dando a impressão
-  // de que a seleção tinha sumido ao navegar/recarregar.
-  const tenantLabelFromStorage = () => { if (typeof window === "undefined") return ""; const code = localStorage.getItem("concilia_cnc_code"); const name = localStorage.getItem("concilia_tenant_name"); return code && name ? `${code} · ${name}` : ""; };
+  // O ambiente ativo precisa continuar visível no campo — é o que identifica de qual cliente são
+  // os dados nas telas abertas (inclusive em várias abas ao mesmo tempo). Só muda quando o próprio
+  // usuário troca a seleção.
+  const tenantLabelFromStorage = () => { if (typeof window === "undefined") return ""; const code = localStorage.getItem("concilia_cnc_code"); const name = localStorage.getItem("concilia_tenant_name"); return code && name ? `${name} · ${code}` : ""; };
   const [tenantSearch, setTenantSearch] = useState(tenantLabelFromStorage);
   const [companyId, setCompanyId] = useState(() => typeof window === "undefined" ? "" : localStorage.getItem("concilia_company_id") ?? "");
   const clients = useQuery({ queryKey: ["client-context", tenantId], queryFn: clientContextService.list, enabled: !!user && !!tenantId });
   const [menuExpanded, setMenuExpanded] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  useEffect(() => { setMobileMenuOpen(false); }, [path]);
+  const [quickMenuOpen, setQuickMenuOpen] = useState(false);
+  const quickMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { setMobileMenuOpen(false); setQuickMenuOpen(false); }, [path]);
+  // Abaixo de sm, alerta e tema viram um único botão — fecha ao clicar fora, igual a qualquer
+  // outro menu suspenso.
+  useEffect(() => {
+    if (!quickMenuOpen) return;
+    const onPointerDown = (event: PointerEvent) => { if (quickMenuRef.current && !quickMenuRef.current.contains(event.target as Node)) setQuickMenuOpen(false); };
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => document.removeEventListener("pointerdown", onPointerDown);
+  }, [quickMenuOpen]);
   const activeItem = navigation.find((item) => path === item.href || path.startsWith(`${item.href}/`));
 
   useEffect(() => {
@@ -77,28 +80,60 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (!hydrated || !user) return null;
 
   const visibleNavigation = navigation.filter((item) => !item.admin || user.role === "ADMIN");
-  const selectTenant = async (id: string) => { const response = await api.post<ApiResponse<{ accessToken: string; tenant: ClientTenant }>>("/auth/select-tenant", { tenantId: id }); const selected = response.data.data; localStorage.setItem("concilia_token", selected.accessToken); localStorage.setItem("concilia_tenant_id", selected.tenant.id); localStorage.setItem("concilia_tenant_name", selected.tenant.name); localStorage.setItem("concilia_cnc_code", selected.tenant.cncCode); localStorage.removeItem("concilia_company_id"); setTenantId(selected.tenant.id); setTenantSearch(`${selected.tenant.cncCode} · ${selected.tenant.name}`); window.location.reload(); };
+  const selectTenant = async (id: string) => { const response = await api.post<ApiResponse<{ accessToken: string; tenant: ClientTenant }>>("/auth/select-tenant", { tenantId: id }); const selected = response.data.data; localStorage.setItem("concilia_token", selected.accessToken); localStorage.setItem("concilia_tenant_id", selected.tenant.id); localStorage.setItem("concilia_tenant_name", selected.tenant.name); localStorage.setItem("concilia_cnc_code", selected.tenant.cncCode); localStorage.removeItem("concilia_company_id"); setTenantId(selected.tenant.id); setTenantSearch(`${selected.tenant.name} · ${selected.tenant.cncCode}`); window.location.reload(); };
   const selectTenantFromSearch = async (value: string) => {
     const normalized = value.trim().toLocaleLowerCase("pt-BR");
-    const tenant = (tenants.data ?? []).find(item => item.id === value || item.cncCode.toLocaleLowerCase("pt-BR") === normalized || item.name.toLocaleLowerCase("pt-BR") === normalized || `${item.cncCode} · ${item.name}`.toLocaleLowerCase("pt-BR") === normalized);
+    const tenant = (tenants.data ?? []).find(item => item.id === value || item.cncCode.toLocaleLowerCase("pt-BR") === normalized || item.name.toLocaleLowerCase("pt-BR") === normalized || `${item.name} · ${item.cncCode}`.toLocaleLowerCase("pt-BR") === normalized);
     if (tenant && tenant.id !== tenantId) await selectTenant(tenant.id);
   };
+  // Escolher uma opção da lista (clique do mouse ou seta+Enter no datalist nativo) só preenche o
+  // valor do campo — o navegador não dispara blur sozinho. Sem isso, a troca só acontecia se o
+  // usuário depois saísse do campo ou apertasse Enter de novo, o que parecia "não seleciona nada".
+  // Ao detectar que o texto digitado bate exatamente com uma opção, confirma a troca na hora.
+  const handleTenantInputChange = (value: string) => {
+    setTenantSearch(value);
+    if ((tenants.data ?? []).some(item => `${item.name} · ${item.cncCode}` === value)) void selectTenantFromSearch(value);
+  };
   return (
+    <TabsProvider>
     <div className="min-h-screen bg-[#f7f8fc] text-slate-800">
       <header className="sticky top-0 z-30 h-[72px] border-b border-slate-200 bg-white">
         <div className="flex h-[61px] items-center gap-3 px-4 lg:gap-5 lg:px-7">
           <button onClick={() => setMobileMenuOpen(true)} className="rounded p-2 text-slate-600 hover:bg-slate-100 lg:hidden" aria-label="Abrir menu" aria-expanded={mobileMenuOpen}><Menu size={20} /></button>
           <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5 text-[#273252]">
             <span className="grid size-8 place-items-center rounded-full bg-[#394a78] text-sm font-bold text-white">C</span>
-            <span className="text-lg font-bold tracking-tight">CONCILIA <small className="font-medium text-slate-500">ERP</small></span>
+            {/* Nome completo só cabe a partir de sm — em telas de celular sobra só o círculo "C". */}
+            <span className="hidden text-lg font-bold tracking-tight sm:inline">CONCILIA <small className="font-medium text-slate-500">ERP</small></span>
           </Link>
           <div className="hidden h-8 w-px bg-slate-200 lg:block" />
-          <label className="hidden w-[21rem] items-center gap-2 rounded border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 lg:flex"><span className="whitespace-nowrap font-semibold">Ambiente:</span><input list="concilia-tenant-options" value={tenantSearch} onChange={event => setTenantSearch(event.target.value)} onBlur={event => selectTenantFromSearch(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); selectTenantFromSearch(event.currentTarget.value); } }} placeholder="Digite o nome ou CNC_CODE" aria-label="Buscar ambiente por nome ou CNC_CODE" className="min-w-0 flex-1 bg-transparent font-medium text-slate-800 outline-none"/><datalist id="concilia-tenant-options">{(tenants.data ?? []).map(tenant => <option key={tenant.id} value={`${tenant.cncCode} · ${tenant.name}`}>{tenant.id}</option>)}</datalist></label>
+          {/* Abaixo de lg (telas médias/celular) não cabe o input+datalist inteiro no header —
+              em vez de esconder o ambiente selecionado por completo (como antes, só visível
+              acima de 1024px), mostra um selo compacto clicável que abre o mesmo seletor já
+              existente no menu mobile (linhas ~129 abaixo), garantindo que o ambiente ativo
+              sempre apareça em algum tamanho de tela. */}
+          <button type="button" onClick={() => setMobileMenuOpen(true)} className="flex min-w-0 max-w-[9rem] items-center gap-1.5 rounded border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600 sm:max-w-[12rem] lg:hidden" aria-label="Trocar ambiente">
+            <span className="shrink-0 font-semibold">Ambiente:</span>
+            <span className="min-w-0 truncate font-medium text-slate-800">{tenantSearch || "Selecionar"}</span>
+          </button>
+          <label className="hidden w-[21rem] items-center gap-2 rounded border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 lg:flex"><span className="whitespace-nowrap font-semibold">Ambiente:</span><input list="concilia-tenant-options" value={tenantSearch} onChange={event => handleTenantInputChange(event.target.value)} onBlur={event => selectTenantFromSearch(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); selectTenantFromSearch(event.currentTarget.value); } }} placeholder="Digite o nome ou CNC_CODE" aria-label="Buscar ambiente por nome ou CNC_CODE" className="min-w-0 flex-1 bg-transparent font-medium text-slate-800 outline-none"/><datalist id="concilia-tenant-options">{(tenants.data ?? []).map(tenant => <option key={tenant.id} value={`${tenant.name} · ${tenant.cncCode}`}>{tenant.id}</option>)}</datalist></label>
           <div className="hidden min-w-0 flex-1 truncate text-xs text-slate-500 xl:block">Início <span className="px-1">›</span> {activeItem?.label ?? "Concilia ERP"}</div>
           <div className="ml-auto flex items-center gap-3 text-xs text-slate-500">
             {user.role === "ADMIN" && <Link href="/documentation" className="hidden items-center gap-1.5 hover:text-[#176a84] md:flex"><BookOpen size={16} className="text-cyan-600" />Documentação</Link>}
-            <button className="relative rounded p-2 hover:bg-slate-100" aria-label="Notificações"><Bell size={18} /><i className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-amber-400" /></button>
-            <button onClick={toggleTheme} className="rounded p-2 hover:bg-slate-100" aria-label={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button>
+            {/* Alerta e tema lado a lado só cabem a partir de sm — abaixo disso se sobrepunham
+                com o selo de ambiente e o perfil; viram um único botão com dropdown. */}
+            <div className="hidden items-center gap-3 sm:flex">
+              <button className="relative rounded p-2 hover:bg-slate-100" aria-label="Notificações"><Bell size={18} /><i className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-amber-400" /></button>
+              <button onClick={toggleTheme} className="rounded p-2 hover:bg-slate-100" aria-label={theme === "dark" ? "Usar tema claro" : "Usar tema escuro"}>{theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}</button>
+            </div>
+            <div className="relative sm:hidden" ref={quickMenuRef}>
+              <button onClick={() => setQuickMenuOpen((open) => !open)} className="relative rounded p-2 hover:bg-slate-100" aria-label="Alertas e tema" aria-expanded={quickMenuOpen}><MoreVertical size={18} /><i className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-amber-400" /></button>
+              {quickMenuOpen && (
+                <div className="absolute right-0 top-full z-40 mt-1 w-48 rounded-md border border-slate-200 bg-white py-1 text-slate-700 shadow-lg">
+                  <button className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50" onClick={() => setQuickMenuOpen(false)}><Bell size={16} />Notificações</button>
+                  <button onClick={() => { toggleTheme(); setQuickMenuOpen(false); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50">{theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}{theme === "dark" ? "Tema claro" : "Tema escuro"}</button>
+                </div>
+              )}
+            </div>
             <Link href="/profile" className="flex items-center gap-1 rounded px-2 py-1.5 hover:bg-slate-100"><span className="hidden text-right sm:block"><b className="block text-sm font-semibold text-slate-700">{user.name}</b><span>{user.role === "ADMIN" ? "Administrador" : user.role === "COMPANY_ADMIN" ? "Administrador do cliente" : "Analista"}</span></span><ChevronDown size={15} /></Link>
             <button onClick={() => { logout(); router.replace("/login"); }} title="Sair" className="rounded p-2 hover:bg-slate-100"><LogOut size={17} /></button>
           </div>
@@ -114,7 +149,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {visibleNavigation.map((item) => {
             const Icon = item.icon;
             const active = path === item.href || path.startsWith(`${item.href}/`);
-            return <Link key={item.href} href={item.href} title={menuExpanded ? undefined : item.label} className={cn("flex h-10 items-center border-l-[3px] transition", menuExpanded ? "gap-3 px-2.5" : "w-9 justify-center", active ? "border-[#5471bf] bg-[#e6eafc] text-[#405b9e]" : "border-transparent text-[#39a4c2] hover:bg-cyan-50")}><Icon size={18} className="shrink-0" />{menuExpanded && <span className="truncate text-sm font-medium">{item.label}</span>}</Link>;
+            return <TabLink key={item.href} href={item.href} title={menuExpanded ? undefined : item.label} className={cn("flex h-10 items-center border-l-[3px] transition", menuExpanded ? "gap-3 px-2.5" : "w-9 justify-center", active ? "border-[#5471bf] bg-[#e6eafc] text-[#405b9e]" : "border-transparent text-[#39a4c2] hover:bg-cyan-50")}><Icon size={18} className="shrink-0" />{menuExpanded && <span className="truncate text-sm font-medium">{item.label}</span>}</TabLink>;
           })}
         </nav>
       </aside>
@@ -128,19 +163,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
             <label className="mx-3 mt-3 flex items-center gap-2 rounded border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
               <span className="whitespace-nowrap font-semibold">Ambiente:</span>
-              <input list="concilia-tenant-options" value={tenantSearch} onChange={event => setTenantSearch(event.target.value)} onBlur={event => selectTenantFromSearch(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); selectTenantFromSearch(event.currentTarget.value); } }} placeholder="Digite o nome ou CNC_CODE" aria-label="Buscar ambiente por nome ou CNC_CODE" className="min-w-0 flex-1 bg-transparent font-medium text-slate-800 outline-none"/>
+              <input list="concilia-tenant-options" value={tenantSearch} onChange={event => handleTenantInputChange(event.target.value)} onBlur={event => selectTenantFromSearch(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); selectTenantFromSearch(event.currentTarget.value); } }} placeholder="Digite o nome ou CNC_CODE" aria-label="Buscar ambiente por nome ou CNC_CODE" className="min-w-0 flex-1 bg-transparent font-medium text-slate-800 outline-none"/>
             </label>
             <nav className="flex flex-col gap-1 px-2 py-3">
               {visibleNavigation.map((item) => {
                 const Icon = item.icon;
                 const active = path === item.href || path.startsWith(`${item.href}/`);
-                return <Link key={item.href} href={item.href} className={cn("flex h-10 items-center gap-3 rounded border-l-[3px] px-2.5 transition", active ? "border-[#5471bf] bg-[#e6eafc] text-[#405b9e]" : "border-transparent text-[#39a4c2] hover:bg-cyan-50")}><Icon size={18} className="shrink-0" /><span className="truncate text-sm font-medium">{item.label}</span></Link>;
+                return <TabLink key={item.href} href={item.href} className={cn("flex h-10 items-center gap-3 rounded border-l-[3px] px-2.5 transition", active ? "border-[#5471bf] bg-[#e6eafc] text-[#405b9e]" : "border-transparent text-[#39a4c2] hover:bg-cyan-50")}><Icon size={18} className="shrink-0" /><span className="truncate text-sm font-medium">{item.label}</span></TabLink>;
               })}
             </nav>
           </aside>
         </div>
       )}
-      <main className={cn("transition-[padding] duration-200", menuExpanded ? "lg:pl-64" : "lg:pl-12")}><div className="min-h-[calc(100vh-72px)] border-l-4 border-[#e4e2ff] bg-white px-5 py-8 lg:px-10">{children}</div></main>
+      <main className={cn("transition-[padding] duration-200", menuExpanded ? "lg:pl-64" : "lg:pl-12")}><div className="min-h-[calc(100vh-72px)] border-l-4 border-[#e4e2ff] bg-white"><TabViewport /></div></main>
     </div>
+    </TabsProvider>
   );
 }

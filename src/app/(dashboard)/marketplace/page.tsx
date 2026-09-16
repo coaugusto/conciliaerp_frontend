@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { TabLink } from "@/components/layout/tab-link";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -178,7 +178,7 @@ export default function Marketplace() {
       <PageHeader
         title="Catálogo Central"
         description="Produtos globais aprovados e fluxo de carga inicial para análise externa."
-        action={<Link href="/marketplace/categories" className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700"><FolderTree size={16} />Categorias</Link>}
+        action={<TabLink href="/marketplace/categories" className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700"><FolderTree size={16} />Categorias</TabLink>}
       />
       <InitialLoadCard
         candidates={candidates.data?.length ?? 0}
@@ -211,6 +211,7 @@ export default function Marketplace() {
       <CatalogSummaryCards
         summary={summary.data}
         loading={summary.isLoading}
+        error={summary.isError}
         active={statusFilter}
         onSelect={(value) => {
           setStatusFilter((current) => (current === value ? null : value));
@@ -244,11 +245,13 @@ export default function Marketplace() {
 function CatalogSummaryCards({
   summary,
   loading,
+  error,
   active,
   onSelect,
 }: {
   summary: MasterCatalogTaxationStatusCounts | undefined;
   loading: boolean;
+  error: boolean;
   active: MasterCatalogTaxationStatus | null;
   onSelect: (value: MasterCatalogTaxationStatus) => void;
 }) {
@@ -257,6 +260,10 @@ function CatalogSummaryCards({
     { label: "Total publicado", value: null as MasterCatalogTaxationStatus | null, count: summary?.total },
     ...statuses.map((status) => ({ label: taxationStatusLabels[status], value: status, count: summary?.[status] })),
   ];
+  // Antes disso, uma falha na consulta (ex.: tenant com catálogo de tributação muito grande)
+  // caía silenciosamente pra "0" em todo card — indistinguível de "realmente não há nada" e sem
+  // nenhum sinal de que o dado não pôde ser calculado.
+  if (error) return <div className="mb-5"><ErrorState message="Não foi possível calcular os totais de tributação do catálogo." /></div>;
   return (
     <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Resumo do Catálogo Central">
       {cards.map((card) => (
@@ -314,7 +321,7 @@ function CatalogProductsTable({
                 <td className="p-3">{product.category ?? "—"}</td>
                 <td className="p-3">{Math.round(Number(product.confidence) * 100)}%</td>
                 <td className="p-3"><span title={product.taxation.status === "REUSED" ? reusedTaxationTooltip(product.taxation.profiles) : undefined} className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide ${taxationStatusTone[product.taxation.status]} ${product.taxation.status === "REUSED" ? "cursor-help" : ""}`}>{taxationStatusLabels[product.taxation.status]}</span></td>
-                <td className="p-3 text-right"><Link href={`/marketplace/products/${encodeURIComponent(product.id)}`} className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-800"><Eye size={14} />Detalhes</Link></td>
+                <td className="p-3 text-right"><TabLink href={`/marketplace/products/${encodeURIComponent(product.id)}`} className="inline-flex items-center gap-1.5 rounded-md bg-blue-700 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-blue-800"><Eye size={14} />Detalhes</TabLink></td>
               </tr>
             ))}
           </tbody>

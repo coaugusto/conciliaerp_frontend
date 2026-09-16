@@ -19,7 +19,10 @@ export function jobScopeLabel(parameters?: Record<string, unknown> | null): stri
   if (!parameters) return null;
   const from = parameters["postingFrom"], to = parameters["postingTo"], company = parameters["companyNumber"];
   const parts: string[] = [];
-  const asDate = (value: unknown) => { const d = new Date(String(value)); return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleDateString("pt-BR"); };
+  // timeZone:"UTC" é essencial aqui: "2026-08-01" (data sem hora) vira meia-noite UTC ao passar
+  // por `new Date()`, e sem fixar o fuso na formatação isso exibia um dia a menos no Brasil
+  // (UTC-3) — 01/08 virava "31/07" na tela.
+  const asDate = (value: unknown) => { const d = new Date(String(value)); return Number.isNaN(d.getTime()) ? String(value) : d.toLocaleDateString("pt-BR", { timeZone: "UTC" }); };
   if (from != null || to != null) parts.push(`Período: ${from != null ? asDate(from) : "?"} – ${to != null ? asDate(to) : "?"}`);
   if (company != null && company !== "") parts.push(`Empresa: ${company}`);
   return parts.length ? parts.join(" · ") : null;

@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { ArrowLeft, Database, Edit3, Link2, Receipt, Save, Search, Sparkles, X } from "lucide-react";
 import { Button, Card, ErrorState, InlineLoader, PageHeader, PageLoader } from "@/components/shared/ui";
+import { useTabParams } from "@/providers/tabs-provider";
 import { getApiErrorMessage } from "@/services/api/client";
 import { useAuth } from "@/providers/providers";
 import { clientContextService } from "@/services/client-context.service";
@@ -52,7 +52,7 @@ const draftFrom = (item: MasterCatalogProductDetail): Draft => Object.fromEntrie
 const changesFrom = (draft: Draft, original: MasterCatalogProductDetail): MasterCatalogProductChanges => Object.fromEntries(editableFields.filter(({ key }) => draft[key] !== String(original[key] ?? "")).map(({ key, type }) => [key, type && draft[key] !== "" ? Number(draft[key]) : draft[key]]));
 
 export default function MasterCatalogProductDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useTabParams<{ id: string }>();
   const productId = decodeURIComponent(id);
   const { user } = useAuth();
   const isAdmin = user?.role === "ADMIN";
@@ -148,7 +148,13 @@ function TaxationEditRow({ profile, onCancel, onSaved }: { profile: MasterCatalo
 }
 
 function TaxationProfilesTable({ profiles, companyState, isAdmin, onSaved }: { profiles: MasterCatalogTaxationProfile[]; companyState: string | null; isAdmin: boolean; onSaved: () => void }) {
-  const [activeType, setActiveType] = useState<string | null>(null);
+  // undefined = ainda não escolhido → usa o mais frequente como padrão. Sem opção "Todos" em
+  // nenhum dos dois: o objetivo é sempre chegar a no máximo uma linha por UF (a combinação
+  // regime × tipo já filtrada), nunca a lista cheia (uma família chegou a mostrar 112 linhas
+  // em vez de ~27 por misturar os 4 regimes de uma vez). Regime primeiro, tipo depois — regime
+  // é a divisão mais grosseira (Normal vs. Simples Nacional muda o que faz sentido comparar).
+  const [activeRegime, setActiveRegime] = useState<string | undefined>(undefined);
+  const [activeType, setActiveType] = useState<string | undefined>(undefined);
   const [editingId, setEditingId] = useState<string | null>(null);
   // Um tenant pode ter estabelecimentos em várias UFs — sem esse filtro a tabela mistura a
   // tributação de UFs de Origem que não têm nada a ver com a empresa selecionada no momento.
@@ -157,24 +163,36 @@ function TaxationProfilesTable({ profiles, companyState, isAdmin, onSaved }: { p
   const scopedToCompanyUf = companyState ? profiles.filter((profile) => profile.companyState === companyState) : profiles;
   const scopedByOtherUf = companyState && scopedToCompanyUf.length === 0 && profiles.length > 0;
   const scoped = scopedByOtherUf ? profiles : scopedToCompanyUf;
-  const types = [...new Set(scoped.map((profile) => profile.taxationType ?? ""))].sort((a, b) => taxationTypeLabel(a || null).localeCompare(taxationTypeLabel(b || null)));
-  const visible = activeType === null ? scoped : scoped.filter((profile) => (profile.taxationType ?? "") === activeType);
+  const regimeCounts = new Map<string, number>();
+  for (const profile of scoped) regimeCounts.set(profile.taxRegimeId ?? "", (regimeCounts.get(profile.taxRegimeId ?? "") ?? 0) + 1);
+  const regimeLabel = (regimeId: string) => scoped.find((profile) => (profile.taxRegimeId ?? "") === regimeId)?.taxRegimeDescription || (regimeId ? `Regime ${regimeId}` : "Sem regime");
+  const regimes = [...regimeCounts.keys()].sort((a, b) => regimeCounts.get(b)! - regimeCounts.get(a)!);
+  const effectiveRegime = activeRegime ?? regimes[0];
+  const afterRegime = scoped.filter((profile) => (profile.taxRegimeId ?? "") === effectiveRegime);
+  const typeCounts = new Map<string, number>();
+  for (const profile of afterRegime) typeCounts.set(profile.taxationType ?? "", (typeCounts.get(profile.taxationType ?? "") ?? 0) + 1);
+  const types = [...typeCounts.keys()].sort((a, b) => taxationTypeLabel(a || null).localeCompare(taxationTypeLabel(b || null)));
+  const effectiveType = activeType ?? types[0];
+  const visible = afterRegime.filter((profile) => (profile.taxationType ?? "") === effectiveType);
   return (
     <>
       {scopedByOtherUf && <p className="border-b border-slate-200 bg-amber-50 p-3 text-xs text-amber-800">Nenhuma tributação com UF de Origem {companyState} para este produto — mostrando as {profiles.length} tributação(ões) de outras UFs.</p>}
       {companyState && !scopedByOtherUf && scopedToCompanyUf.length < profiles.length && <p className="border-b border-slate-200 bg-slate-50 p-3 text-xs text-slate-500">Mostrando só a tributação com UF de Origem {companyState} ({scopedToCompanyUf.length} de {profiles.length} no total).</p>}
+      {regimes.length > 1 && (
+        <div role="tablist" aria-label="Regime tributário" className="flex flex-wrap items-center gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 p-2">
+          <span className="shrink-0 px-2 text-[11px] font-semibold uppercase text-slate-400">Regime:</span>
+          {regimes.map((regimeId) => <button key={regimeId || "sem-regime"} role="tab" aria-selected={effectiveRegime === regimeId} onClick={() => { setActiveRegime(regimeId); setActiveType(undefined); }} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${effectiveRegime === regimeId ? "bg-white text-cyan-800 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`}>{regimeLabel(regimeId)} ({regimeCounts.get(regimeId)})</button>)}
+        </div>
+      )}
       {types.length > 1 && (
-        <div role="tablist" aria-label="Tipo de operação" className="flex flex-wrap gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 p-2">
-          <button role="tab" aria-selected={activeType === null} onClick={() => setActiveType(null)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${activeType === null ? "bg-white text-cyan-800 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`}>Todos ({scoped.length})</button>
-          {types.map((type) => {
-            const count = scoped.filter((profile) => (profile.taxationType ?? "") === type).length;
-            return <button key={type || "sem-tipo"} role="tab" aria-selected={activeType === type} onClick={() => setActiveType(type)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${activeType === type ? "bg-white text-cyan-800 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`}>{taxationTypeLabel(type || null)} ({count})</button>;
-          })}
+        <div role="tablist" aria-label="Tipo de operação" className="flex flex-wrap items-center gap-1 overflow-x-auto border-b border-slate-200 bg-white p-2">
+          <span className="shrink-0 px-2 text-[11px] font-semibold uppercase text-slate-400">Tipo:</span>
+          {types.map((type) => <button key={type || "sem-tipo"} role="tab" aria-selected={effectiveType === type} onClick={() => setActiveType(type)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${effectiveType === type ? "bg-cyan-50 text-cyan-800 ring-1 ring-cyan-200" : "text-slate-500 hover:bg-slate-50"}`}>{taxationTypeLabel(type || null)} ({typeCounts.get(type)})</button>)}
         </div>
       )}
       <div className="overflow-x-auto">
         <table className="w-full min-w-[1080px] text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="p-3">Nome</th><th className="p-3">Nº Tributação</th><th className="p-3">Tipo</th><th className="p-3">UF origem → destino</th><th className="p-3">CST ICMS/IPI/PIS/COFINS</th><th className="p-3">CFOP</th><th className="p-3">ICMS / ST / MVA</th><th className="p-3">FCP / DIFAL</th><th className="p-3">Origem</th>{isAdmin && <th className="p-3 text-right">Ação</th>}</tr></thead>
+          <thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="p-3">Nome</th><th className="p-3">Nº Tributação</th><th className="p-3">Tipo</th><th className="p-3">Regime</th><th className="p-3">UF origem → destino</th><th className="p-3">CST ICMS/IPI/PIS/COFINS</th><th className="p-3">CFOP</th><th className="p-3">ICMS / ST / MVA</th><th className="p-3">FCP / DIFAL</th><th className="p-3">Origem</th>{isAdmin && <th className="p-3 text-right">Ação</th>}</tr></thead>
           <tbody>
             {visible.map((profile) => editingId === profile.id ? (
               <TaxationEditRow key={profile.id} profile={profile} onCancel={() => setEditingId(null)} onSaved={onSaved} />
@@ -183,6 +201,7 @@ function TaxationProfilesTable({ profiles, companyState, isAdmin, onSaved }: { p
                 <td className="p-3 font-medium">{taxationDisplayName(profile)}</td>
                 <td className="p-3 font-mono text-xs">{profile.sourceTaxationRef ?? "—"}</td>
                 <td className="p-3 text-xs text-slate-600">{taxationTypeLabel(profile.taxationType)}</td>
+                <td className="p-3 text-xs text-slate-600">{profile.taxRegimeDescription || (profile.taxRegimeId ? `Regime ${profile.taxRegimeId}` : "—")}</td>
                 <td className="p-3">{taxationRoute(profile).origin} → {taxationRoute(profile).destination}</td>
                 <td className="p-3 font-mono text-xs">{profile.cstIcms ?? "—"} / {profile.cstIpi ?? "—"} / {profile.cstPis ?? "—"} / {profile.cstCofins ?? "—"}</td>
                 <td className="p-3">{profile.cfop ?? "—"}</td>

@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { BookOpen, Database, ExternalLink, MonitorCog, ServerCog } from "lucide-react";
 import { Card, PageHeader } from "@/components/shared/ui";

@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { TabLink } from "@/components/layout/tab-link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ChevronDown, ChevronRight, Folder, FolderOpen, Package } from "lucide-react";
@@ -54,7 +54,7 @@ export default function CategoryTreePage() {
   };
 
   return <>
-    <PageHeader title="Categorias" description="Hierarquia mercadológica do catálogo central — arraste um produto para outra categoria-folha para reclassificar." action={<Link href="/marketplace" className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700"><ArrowLeft size={16} />Voltar</Link>} />
+    <PageHeader title="Categorias" description="Hierarquia mercadológica do catálogo central — arraste um produto para outra categoria-folha para reclassificar." action={<TabLink href="/marketplace" className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700"><ArrowLeft size={16} />Voltar</TabLink>} />
     {tree.isError && <ErrorState message="Não foi possível carregar a árvore de categorias." />}
     {!tree.isError && (
       <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
@@ -78,7 +78,7 @@ export default function CategoryTreePage() {
                     <tbody>
                       {products.data.items.map((product) => (
                         <tr key={product.id} draggable onDragStart={() => setDragProductId(product.id)} onDragEnd={() => setDragProductId(null)} className={`cursor-grab border-t border-slate-100 active:cursor-grabbing ${dragProductId === product.id ? "opacity-40" : ""}`}>
-                          <td className="p-3 font-medium text-slate-800"><Package size={14} className="mr-1.5 inline text-slate-400" /><Link href={`/marketplace/products/${encodeURIComponent(product.id)}`} className="hover:underline">{product.canonicalDescription}</Link></td>
+                          <td className="p-3 font-medium text-slate-800"><Package size={14} className="mr-1.5 inline text-slate-400" /><TabLink href={`/marketplace/products/${encodeURIComponent(product.id)}`} className="hover:underline">{product.canonicalDescription}</TabLink></td>
                           <td className="p-3 font-mono text-xs">{product.ncm ?? "—"}</td>
                           <td className="p-3 font-mono text-xs">{product.gtin ?? "—"}</td>
                         </tr>

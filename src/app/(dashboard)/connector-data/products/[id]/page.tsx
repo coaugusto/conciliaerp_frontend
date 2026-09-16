@@ -1,14 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Database, FileText, PackageSearch } from "lucide-react";
 import { Card, ErrorState, PageHeader, PageLoader, dateTime } from "@/components/shared/ui";
 import { connectorTransmissionsService } from "@/services/connector-transmissions.service";
+import { useTabParams } from "@/providers/tabs-provider";
 
 export default function ConnectorProductDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id } = useTabParams<{ id: string }>();
   const recordId = decodeURIComponent(id);
   const record = useQuery({ queryKey: ["connector-transmission-record", recordId], queryFn: () => connectorTransmissionsService.record(recordId), enabled: Boolean(recordId), retry: false });
 
