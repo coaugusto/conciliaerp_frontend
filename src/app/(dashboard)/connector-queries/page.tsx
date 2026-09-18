@@ -14,12 +14,16 @@ export default function Page() {
   const refresh=()=>Promise.all([qc.invalidateQueries({queryKey:["connector-queries"]}),qc.invalidateQueries({queryKey:["connector-monitoring"]})]);
   const toggle=useMutation({mutationFn:({id,enabled}:{id:string;enabled:boolean})=>connectorQueriesService.setEnabled(id,enabled),onSuccess:refresh});
   const remove=useMutation({mutationFn:(id:string)=>connectorQueriesService.remove(id),onSuccess:refresh,onError:e=>alert(getApiErrorMessage(e))});
+  // Publica no tenant as consultas da versão que está no código (mesmo efeito do seed pelo
+  // terminal). Só cria o que falta e nasce desativada — ativar continua sendo um passo à parte.
+  const publishCatalog=useMutation({mutationFn:()=>connectorQueriesService.publishCatalog(),onSuccess:(result)=>{refresh();alert(result.created?`Catálogo v${result.version} publicado: ${result.created} consulta(s) nova(s) (${result.codes.join(", ")}). Ative-as para o Connector passar a usá-las.`:`Catálogo v${result.version} já estava publicado — nenhuma consulta nova.`)},onError:e=>alert(getApiErrorMessage(e))});
   const activateLatest=useMutation({mutationFn:()=>connectorQueriesService.activateLatest(),onSuccess:(result)=>{refresh();alert(`${result.activated} consulta(s) ativada(s) na versão mais recente.`)},onError:e=>alert(getApiErrorMessage(e))});
   const deletePrevious=useMutation({mutationFn:()=>connectorQueriesService.deletePreviousVersions(),onSuccess:(result)=>{refresh();alert(`${result.deleted} versão(ões) anterior(es) excluída(s).`)},onError:e=>alert(getApiErrorMessage(e))});
   if(queries.isLoading)return <Card className="p-8"><PageLoader/></Card>;
   if(queries.isError)return <ErrorState message={getApiErrorMessage(queries.error)}/>;
   return <><PageHeader title="Consultas do Connector" description="Extrações, agendamentos e situação dos envios."/><Operations data={monitor.data} queries={queries.data??[]} initial={()=>setInitial(true)} configure={setForm} refresh={refresh}/>{monitor.isError&&<ErrorState message={getApiErrorMessage(monitor.error)}/>}
     <div className="mb-3 flex flex-wrap gap-2">
+      <Button disabled={publishCatalog.isPending} onClick={()=>{if(confirm("Publicar neste cliente as consultas da versão atual do catálogo? Consultas já publicadas não são alteradas; as novas entram desativadas."))publishCatalog.mutate()}}>{publishCatalog.isPending?"Publicando...":"Publicar catálogo de consultas"}</Button>
       <Button variant="secondary" disabled={activateLatest.isPending} onClick={()=>{if(confirm("Ativar todas as consultas na versão mais recente? Isso desativa qualquer versão anterior de cada código."))activateLatest.mutate()}}>{activateLatest.isPending?"Ativando...":"Ativar todas na versão mais recente"}</Button>
       <Button variant="danger" disabled={deletePrevious.isPending} onClick={()=>{if(confirm("Excluir todas as versões anteriores (não habilitadas) de cada consulta? Esta ação não pode ser desfeita."))deletePrevious.mutate()}}>{deletePrevious.isPending?"Excluindo...":"Excluir versões anteriores"}</Button>
     </div>

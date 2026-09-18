@@ -36,6 +36,7 @@ export const connectorQueriesService = {
   create: async (data: Omit<ConnectorQuery, "id" | "version" | "sha256" | "enabled" | "syncWithConnector">) => (await api.post<ApiResponse<ConnectorQuery>>("/connector-queries", data)).data.data,
   setEnabled: async (id: string, enabled: boolean) => (await api.patch(`/connector-queries/${id}/enabled`, { enabled })).data,
   remove: async (id: string) => (await api.delete<ApiResponse<{ id: string; code: string; version: number; deleted: boolean }>>(`/connector-queries/${id}`)).data.data,
+  publishCatalog: async () => (await api.post<ApiResponse<{ version: number; created: number; existing: number; codes: string[] }>>("/connector-queries/catalog/publish")).data.data,
   activateLatest: async () => (await api.post<ApiResponse<{ activated: number }>>("/connector-queries/activate-latest")).data.data,
   deletePreviousVersions: async () => (await api.delete<ApiResponse<{ deleted: number }>>("/connector-queries/previous-versions")).data.data,
   setSync: async (id: string, syncWithConnector: boolean) => (await api.patch(`/connector-queries/${id}/sync`, { syncWithConnector })).data,
