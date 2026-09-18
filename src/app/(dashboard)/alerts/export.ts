@@ -67,7 +67,8 @@ export async function buildWorkbook(groups: FiscalAlertGroup[], products: Fiscal
   const ExcelJS = (await import("exceljs")).default;
   const productsByFindingCode = new Map<string, FiscalProduct[]>();
   for (const product of products) {
-    for (const finding of product.findings) {
+    // Cards de conformidade (product.compliance) também viram aba com a lista completa de produtos.
+    for (const finding of [...product.findings, ...(product.compliance ?? [])]) {
       if (!productsByFindingCode.has(finding.code)) productsByFindingCode.set(finding.code, []);
       productsByFindingCode.get(finding.code)!.push(product);
     }

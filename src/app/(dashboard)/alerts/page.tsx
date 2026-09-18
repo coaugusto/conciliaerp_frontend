@@ -2,15 +2,16 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowRight, Building2, Check, CheckCircle2, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Download, Edit3, FileWarning, Info, Layers3, LoaderCircle, PackageSearch, Search, Send, ShieldAlert, Upload, X } from "lucide-react";
+import { ArrowRight, Building2, Check, CheckCircle2, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Download, Edit3, FileText, FileWarning, Info, Layers3, LoaderCircle, PackageSearch, Search, Send, ShieldAlert, ShieldCheck, Upload, X } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader, PageLoader, money } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
 import { fiscalComplianceService } from "@/services/fiscal-compliance.service";
+import { useTabSearchParams } from "@/providers/tabs-provider";
 import { fiscalAlertsService, type FiscalAlertEntity, type FiscalAlertGroup, type FiscalAlertItem, type FiscalAlertSeverity, type FiscalSuggestionReference } from "@/services/fiscal-alerts.service";
 import { exportAlertsWorkbook } from "./export";
 import { readAlertsWorkbook } from "./import";
 
-const entityLabel:Record<FiscalAlertEntity,string>={PRODUCT:"Produtos",TAXATION:"Tributações",FAMILY:"Famílias",SUPPLIER:"Fornecedores",SPED:"SPED"};
+const entityLabel:Record<FiscalAlertEntity,string>={PRODUCT:"Produtos",TAXATION:"Tributações",FAMILY:"Famílias",SUPPLIER:"Fornecedores",SPED:"SPED",DOCUMENT:"Notas fiscais"};
 const severityLabel:Record<FiscalAlertSeverity,string>={CRITICAL:"Crítica",HIGH:"Alta",MEDIUM:"Média",LOW:"Baixa"};
 const severityStyle:Record<FiscalAlertSeverity,string>={CRITICAL:"border-red-300 bg-red-50 text-red-800",HIGH:"border-orange-300 bg-orange-50 text-orange-800",MEDIUM:"border-amber-300 bg-amber-50 text-amber-800",LOW:"border-blue-300 bg-blue-50 text-blue-800"};
 
@@ -20,7 +21,9 @@ export default function FiscalAlertsPage(){
   // cache frio ainda está rodando (ver background-completion-notifier.tsx) — sem isso, o
   // React Query poderia descartar a consulta antes dela terminar e a aba nunca piscaria.
   const alerts=useQuery({queryKey:["fiscal-alerts","summary"],queryFn:fiscalAlertsService.summary,gcTime:30*60*1000});
-  const validation=useMutation({mutationFn:fiscalAlertsService.scanCatalog,onSuccess:async()=>{await alerts.refetch();}});
+  // O resumo abre com o último resultado em cache (recalculado em segundo plano quando vence);
+  // "Gerar alertas fiscais" força o recálculo da validação antes de recarregar os cards.
+  const validation=useMutation({mutationFn:async()=>{await fiscalComplianceService.refreshProducts();return fiscalAlertsService.scanCatalog();},onSuccess:async()=>{await alerts.refetch();}});
   const exportWorkbook=useMutation({mutationFn:()=>exportAlertsWorkbook(alerts.data??[])});
   const importWorkbook=useMutation({
     mutationFn:async(file:File)=>{
@@ -31,7 +34,13 @@ export default function FiscalAlertsPage(){
     },
     onSuccess:async()=>{await alerts.refetch();},
   });
-  const [selectedId,setSelectedId]=useState<string>();
+  // ?group=<id> (atalho do Painel de Conciliação) abre a Central já com aquele card selecionado.
+  const searchParams=useTabSearchParams();
+  const initialGroup=searchParams.get("group")??undefined;
+  const [selectedId,setSelectedId]=useState<string|undefined>(initialGroup);
+  const detailRef=useRef<HTMLDivElement>(null);
+  const hasData=Boolean(alerts.data);
+  useEffect(()=>{if(initialGroup&&hasData)detailRef.current?.scrollIntoView({behavior:"smooth",block:"start"});},[initialGroup,hasData]);
   const [entity,setEntity]=useState<FiscalAlertEntity|"ALL">("ALL");
   const [search,setSearch]=useState("");
   const visible=useMemo(()=>(alerts.data??[]).filter(group=>entity==="ALL"||group.entity===entity),[alerts.data,entity]);
@@ -49,16 +58,18 @@ export default function FiscalAlertsPage(){
     {importWorkbook.isSuccess&&<div role="status" className="mb-5 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800"><CheckCircle2 size={17}/>{importWorkbook.data.updated} produto(s) corrigido(s).{importWorkbook.data.notFound.length>0&&` ${importWorkbook.data.notFound.length} código(s) não encontrado(s) no cadastro atual.`}{importWorkbook.data.skipped>0&&` ${importWorkbook.data.skipped} linha(s) sem alteração a aplicar.`}</div>}
     {validation.isSuccess&&<div role="status" className="mb-5 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800"><CheckCircle2 size={17}/>Validação concluída. Os alertas persistidos foram atualizados.</div>}
     {validation.isError&&<div role="alert" className="mb-5"><ErrorState message={getApiErrorMessage(validation.error)}/></div>}
-    <div className="mb-5 flex max-w-5xl flex-wrap gap-2">{(["ALL","PRODUCT","TAXATION","SPED","FAMILY","SUPPLIER"] as const).map(value=><Button key={value} variant={entity===value?"primary":"secondary"} onClick={()=>{setEntity(value);setSelectedId(undefined);}}>{value==="ALL"?"Todas":entityLabel[value]}</Button>)}</div>
+    <div className="mb-5 flex max-w-5xl flex-wrap gap-2">{(["ALL","PRODUCT","TAXATION","DOCUMENT","SPED","FAMILY","SUPPLIER"] as const).map(value=><Button key={value} variant={entity===value?"primary":"secondary"} onClick={()=>{setEntity(value);setSelectedId(undefined);}}>{value==="ALL"?"Todas":entityLabel[value]}</Button>)}</div>
     {alerts.isLoading?<PageLoader/>:<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{visible.map(group=><AlertCard key={group.id} group={group} selected={selected?.id===group.id} select={()=>setSelectedId(group.id)}/>)}</div>}
-    {selected&&<Card className="mt-6 overflow-visible">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-5"><div><p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">{entityLabel[selected.entity]} · {selected.field}</p><h2 className="mt-1 text-lg font-bold text-slate-900">{selected.title}</h2><p className="mt-1 text-sm text-slate-500">Comparação da situação atual com a sugestão de correção.</p></div><label className="flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-3"><Search size={16} className="text-slate-400"/><input value={search} onChange={event=>setSearch(event.target.value)} className="min-w-48 bg-transparent text-sm outline-none" placeholder="Pesquisar nesta pendência"/></label></div>
+    {selected&&<div ref={detailRef} className="scroll-mt-4"><Card className="mt-6 overflow-visible">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-5"><div><p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">{entityLabel[selected.entity]} · {selected.field}</p><h2 className="mt-1 text-lg font-bold text-slate-900">{selected.title}</h2><p className="mt-1 text-sm text-slate-500">{selected.kind==="COMPLIANCE"?"Produtos que cumprem a regra, com a evidência encontrada nas notas fiscais.":"Comparação da situação atual com a sugestão de correção."}</p></div><label className="flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-3"><Search size={16} className="text-slate-400"/><input value={search} onChange={event=>setSearch(event.target.value)} className="min-w-48 bg-transparent text-sm outline-none" placeholder="Pesquisar nesta pendência"/></label></div>
       <AlertItems group={selected} search={search}/>
-    </Card>}
+    </Card></div>}
   </>;
 }
 
-function AlertCard({group,selected,select}:{group:FiscalAlertGroup;selected:boolean;select:()=>void}){return <button type="button" onClick={select} className="text-left"><Card className={`h-full p-5 transition hover:-translate-y-0.5 hover:border-cyan-400 hover:shadow-md ${selected?"border-cyan-600 ring-2 ring-cyan-100":""}`}><div className="flex items-start justify-between gap-3"><span className="grid size-10 place-items-center rounded-lg bg-cyan-50 text-cyan-700"><EntityIcon entity={group.entity}/></span><span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${severityStyle[group.severity]}`}>{severityLabel[group.severity]}</span></div><strong className="mt-4 block text-slate-900">{group.title}</strong><p className="mt-1 min-h-10 text-sm text-slate-500">{group.description}</p>{!!group.estimatedImpact&&<p className="mt-2 text-sm font-semibold text-red-700">Impacto estimado: {money(group.estimatedImpact)}</p>}<div className="mt-4 flex items-end justify-between"><span><b className="block text-2xl text-slate-900">{group.affected}</b><small className="text-slate-500">registros afetados</small></span><span className="text-xs font-semibold text-cyan-700">Ver De/Para →</span></div></Card></button>}
+function AlertCard({group,selected,select}:{group:FiscalAlertGroup;selected:boolean;select:()=>void}){
+  if(group.kind==="COMPLIANCE")return <button type="button" onClick={select} className="text-left"><Card className={`h-full border-emerald-200 bg-emerald-50/60 p-5 transition hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-md ${selected?"border-emerald-600 ring-2 ring-emerald-100":""}`}><div className="flex items-start justify-between gap-3"><span className="grid size-10 place-items-center rounded-lg bg-emerald-100 text-emerald-700"><ShieldCheck size={20}/></span><span className="rounded-full border border-emerald-300 bg-white px-2 py-0.5 text-xs font-semibold text-emerald-800">Em conformidade</span></div><strong className="mt-4 block text-slate-900">{group.title}</strong><p className="mt-1 min-h-10 text-sm text-slate-600">{group.description}</p><div className="mt-4 flex items-end justify-between"><span><b className="block text-2xl text-emerald-800">{group.affected}</b><small className="text-slate-500">produtos em conformidade</small></span><span className="text-xs font-semibold text-emerald-700">Ver produtos →</span></div></Card></button>;
+  return <button type="button" onClick={select} className="text-left"><Card className={`h-full p-5 transition hover:-translate-y-0.5 hover:border-cyan-400 hover:shadow-md ${selected?"border-cyan-600 ring-2 ring-cyan-100":""}`}><div className="flex items-start justify-between gap-3"><span className="grid size-10 place-items-center rounded-lg bg-cyan-50 text-cyan-700"><EntityIcon entity={group.entity}/></span><span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${severityStyle[group.severity]}`}>{severityLabel[group.severity]}</span></div><strong className="mt-4 block text-slate-900">{group.title}</strong><p className="mt-1 min-h-10 text-sm text-slate-500">{group.description}</p>{!!group.estimatedImpact&&<p className="mt-2 text-sm font-semibold text-red-700">Impacto estimado: {money(group.estimatedImpact)}</p>}{!!group.highlight&&<p className="mt-2 text-sm font-semibold text-amber-800">{group.highlight.label}: {money(group.highlight.value)}</p>}<div className="mt-4 flex items-end justify-between"><span><b className="block text-2xl text-slate-900">{group.affected}</b><small className="text-slate-500">registros afetados</small></span><span className="text-xs font-semibold text-cyan-700">Ver De/Para →</span></div></Card></button>}
 const ALERT_ITEMS_PAGE_SIZE=20;
 function AlertItems({group,search}:{group:FiscalAlertGroup;search:string}){
   const term=search.trim().toLocaleLowerCase("pt-BR");
@@ -73,8 +84,8 @@ function AlertItems({group,search}:{group:FiscalAlertGroup;search:string}){
     const rawHref=item.href??(catalogId?`/catalog-review?productId=${encodeURIComponent(catalogId)}&code=${encodeURIComponent(item.code)}`:null);
     const href=rawHref?`${rawHref}${rawHref.includes("?")?"&":"?"}from=alerts`:null;
     return <div key={item.id} className="border-b border-slate-100 p-5 last:border-0">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3"><div><strong className="text-slate-900">{item.description}</strong><p className="font-mono text-xs text-slate-500">{item.code}</p></div><div className="flex flex-wrap items-center gap-2"><span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">{item.confidence}% de confiança</span>{href?<Link href={href} className="inline-flex h-9 items-center gap-2 rounded-lg bg-cyan-700 px-3 text-sm font-semibold text-white hover:bg-cyan-800"><Edit3 size={15}/>Abrir manutenção</Link>:<span title="Este item ainda não está disponível na tela de manutenção" className="inline-flex h-9 items-center gap-2 rounded-lg bg-slate-100 px-3 text-sm font-medium text-slate-500"><Edit3 size={15}/>Sem manutenção disponível</span>}</div></div>
-      <div className="grid items-stretch gap-3 md:grid-cols-[1fr_auto_1fr]"><Comparison label="De · situação atual" value={item.currentValue} tone="current"/><span className="grid place-items-center text-cyan-600"><ArrowRight size={20}/></span><SuggestionComparison item={item}/></div>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3"><div><strong className="text-slate-900">{item.description}</strong><p className="font-mono text-xs text-slate-500">{item.code}</p></div><div className="flex flex-wrap items-center gap-2">{group.kind!=="COMPLIANCE"&&<span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">{item.confidence}% de confiança</span>}{href?<Link href={href} className="inline-flex h-9 items-center gap-2 rounded-lg bg-cyan-700 px-3 text-sm font-semibold text-white hover:bg-cyan-800"><Edit3 size={15}/>{group.kind==="COMPLIANCE"?"Ver produto":"Abrir manutenção"}</Link>:<span title="Este item ainda não está disponível na tela de manutenção" className="inline-flex h-9 items-center gap-2 rounded-lg bg-slate-100 px-3 text-sm font-medium text-slate-500"><Edit3 size={15}/>Sem manutenção disponível</span>}</div></div>
+      {group.kind==="COMPLIANCE"?<div className="grid items-stretch gap-3 md:grid-cols-2"><Comparison label="Encontrado nas notas fiscais" value={item.currentValue} tone="suggested"/><Comparison label="Regra atendida" value={item.suggestedValue} tone="suggested"/></div>:<div className="grid items-stretch gap-3 md:grid-cols-[1fr_auto_1fr]"><Comparison label="De · situação atual" value={item.currentValue} tone="current"/><span className="grid place-items-center text-cyan-600"><ArrowRight size={20}/></span><SuggestionComparison item={item}/></div>}
       {item.spedContext&&<div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950"><b>{item.spedContext.bookkeeping==="EFD_CONTRIBUTIONS"?"EFD-Contribuições":"EFD ICMS/IPI"}</b><span className="ml-2">Registro {item.spedContext.record||"não identificado"}{item.spedContext.parentRecord?` · pai ${item.spedContext.parentRecord}`:""}{item.spedContext.line?` · linha ${item.spedContext.line}`:""}</span><p className="mt-1 text-xs">Registros relacionados: {item.spedContext.relatedRecords.join(", ")||"consultar registro de origem"}</p>{item.spedContext.sourceFile&&<p className="mt-1 font-mono text-xs">{item.spedContext.sourceFile}</p>}</div>}
       {item.actionable===false?<p className="mt-3 text-xs text-slate-500">{item.nonActionableReason??"A correção deve ser realizada na origem da escrituração e o arquivo SPED deve ser validado novamente."}</p>:<AdjustmentActions group={group} item={item}/>}
     </div>;
@@ -114,4 +125,4 @@ function AdjustmentActions({group,item}:{group:FiscalAlertGroup;item:FiscalAlert
     {queue.isError&&<p role="alert" className="mt-3 text-sm text-red-700">{getApiErrorMessage(queue.error)}</p>}
   </div>;
 }
-function EntityIcon({entity}:{entity:FiscalAlertEntity}){if(entity==="PRODUCT")return <PackageSearch size={20}/>;if(entity==="TAXATION")return <ShieldAlert size={20}/>;if(entity==="SPED")return <FileWarning size={20}/>;if(entity==="FAMILY")return <Layers3 size={20}/>;return <Building2 size={20}/>}
+function EntityIcon({entity}:{entity:FiscalAlertEntity}){if(entity==="PRODUCT")return <PackageSearch size={20}/>;if(entity==="TAXATION")return <ShieldAlert size={20}/>;if(entity==="SPED")return <FileWarning size={20}/>;if(entity==="DOCUMENT")return <FileText size={20}/>;if(entity==="FAMILY")return <Layers3 size={20}/>;return <Building2 size={20}/>}

@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Calculator, ChevronDown, FileText, Printer, Settings2, Trash2, X } from "lucide-react";
 import { Button, Card, ErrorState, PageLoader, dateTime, money } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
-import { adjustmentSuggestionsService, type AdjustmentCatalogItem, type AdjustmentDefaultRates, type AdjustmentOrigin, type AdjustmentProposalDetail, type AdjustmentProposalStatus, type AdjustmentServiceMode } from "@/services/adjustment-suggestions.service";
+import { adjustmentSuggestionsService, type AdjustmentCatalogItem, type AdjustmentDefaultRates, type AdjustmentOrigin, type AdjustmentProposalDetail, type AdjustmentProposalItem, type AdjustmentProposalStatus, type AdjustmentServiceMode } from "@/services/adjustment-suggestions.service";
 
 const statusLabel: Record<AdjustmentProposalStatus, string> = { DRAFT: "Rascunho", SENT: "Enviada", ACCEPTED: "Aceita", REJECTED: "Rejeitada" };
 const statusClass: Record<AdjustmentProposalStatus, string> = { DRAFT: "bg-slate-100 text-slate-700", SENT: "bg-cyan-50 text-cyan-700", ACCEPTED: "bg-emerald-50 text-emerald-700", REJECTED: "bg-red-50 text-red-700" };
@@ -155,6 +155,24 @@ function CatalogRow({ item, origin, checked, onToggle, onSavePricing, saving, de
   </li>;
 }
 
+const originSummaryLabel: Record<AdjustmentOrigin, { title: string; unit: string }> = { FISCAL_ALERT: { title: "Pendências fiscais e cadastrais", unit: "Produtos" }, ADHERENCE_GAP: { title: "Plano de Aderência", unit: "Ocorrências" } };
+// Quadro-resumo no topo do contrato: o que foi encontrado, ordenado pelo volume afetado, antes do
+// detalhamento de horas e valores. Usa a quantidade gravada na própria proposta (retrato do momento
+// em que foi orçada), não os alertas atuais — o contrato não pode mudar depois de emitido.
+function ProposalSummary({ items }: { items: AdjustmentProposalItem[] }) {
+  const sections = (Object.keys(originSummaryLabel) as AdjustmentOrigin[])
+    .map((origin) => ({ origin, rows: items.filter((item) => item.origin === origin).sort((a, b) => b.affected - a.affected) }))
+    .filter((section) => section.rows.length);
+  if (!sections.length) return null;
+  return <div className="print:break-inside-avoid">
+    <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Resumo das pendências</h4>
+    <div className="grid gap-4 md:grid-cols-2 print:grid-cols-2">{sections.map(({ origin, rows }) => <table key={origin} className="w-full self-start text-left text-sm">
+      <thead><tr className="border-b border-slate-300 text-xs uppercase text-slate-500"><th className="py-2">{originSummaryLabel[origin].title}</th><th className="py-2 text-right">{originSummaryLabel[origin].unit}</th></tr></thead>
+      <tbody>{rows.map((item) => <tr key={item.id} className="border-b border-slate-100"><td className="py-1.5 pr-3 text-slate-800">{itemLabel(item, origin)}</td><td className="py-1.5 text-right font-semibold tabular-nums text-slate-900">{item.affected.toLocaleString("pt-BR")}</td></tr>)}</tbody>
+    </table>)}</div>
+  </div>;
+}
+
 function ProposalDetail({ proposal, tenantName, cncCode, onClose, onStatus, onDelete, statusPending, deletePending }: { proposal: AdjustmentProposalDetail; tenantName: string; cncCode: string; onClose: () => void; onStatus: (status: AdjustmentProposalStatus) => void; onDelete: () => void; statusPending: boolean; deletePending: boolean }) {
   const totalHours = proposal.items.reduce((sum, item) => sum + item.estimatedHours, 0);
   const totalCost = proposal.items.reduce((sum, item) => sum + item.totalCost, 0);
@@ -171,6 +189,8 @@ function ProposalDetail({ proposal, tenantName, cncCode, onClose, onStatus, onDe
     </div>
     <div className="p-5">
       <div className="mb-4 flex items-center gap-2 print:mb-6"><FileText className="text-cyan-700 print:hidden" size={20} /><div><h3 className="text-xl font-bold text-slate-900">Contrato de Serviço <span className="font-mono text-base font-semibold text-cyan-700">Nº {proposal.proposalNumber}</span></h3><p className="text-sm text-slate-500">Cliente: {tenantName} ({cncCode}) · Proposta criada em {dateTime(proposal.createdAt)} · Status: {statusLabel[proposal.status]}</p></div></div>
+      <ProposalSummary items={proposal.items} />
+      <h4 className="mb-2 mt-6 text-xs font-bold uppercase tracking-wide text-slate-500">Detalhamento dos serviços</h4>
       <table className="w-full text-left text-sm"><thead><tr className="border-b border-slate-300 text-xs uppercase text-slate-500">{["Item", "Horas", "Valor/hora", "Total", "Data prevista"].map((label) => <th key={label} className="py-2">{label}</th>)}</tr></thead><tbody>{proposal.items.map((item) => <tr key={item.id} className="border-b border-slate-100 align-top"><td className="py-2"><span className="font-semibold text-slate-800">{itemLabel(item, item.origin)}</span>{item.serviceMode && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{serviceModeLabel[item.serviceMode]}</span>}{item.actionDescription && <p className="mt-1 max-w-md text-xs text-slate-500">{item.actionDescription}</p>}</td><td className="py-2">{item.estimatedHours}h</td><td className="py-2">{money(item.hourlyRate)}</td><td className="py-2 font-semibold">{money(item.totalCost)}</td><td className="py-2">{item.scheduledDate ? dateTime(item.scheduledDate) : "A combinar"}</td></tr>)}</tbody></table>
       <div className="mt-4 flex justify-end"><strong className="text-lg text-slate-900">Total geral: {totalHours}h · {money(totalCost)}</strong></div>
       <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 print:break-inside-avoid">
