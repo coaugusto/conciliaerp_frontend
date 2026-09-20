@@ -5,7 +5,8 @@ export type ProductEntityType = typeof productEntityTypes[number];
 export const adherenceEntityTypes = ['ADHERENCE_PLAN_V1', 'CGO_REFERENCE_V1', 'ACCOUNTING_GAPS_V1', 'SPECIES_ACCOUNT_GAPS_V1', 'BANK_ACCOUNT_GAPS_V1', 'CGO_MODELS_V1', 'SPECIES_MODELS_V1', 'BUDGET_MODELS_V1'] as const;
 export type AdherenceEntityType = typeof adherenceEntityTypes[number];
 export type EntityType = ProductEntityType | AdherenceEntityType;
-export type DataIngestionSettings = { id: string; companyId: string; consincoAutoAdjustEnabled: boolean; connectorDatabaseEnabled: boolean; consincoApiEnabled: boolean; spedEnabled: boolean; catalogReconciliationEnabled: boolean; fiscalValidationEnabled: boolean; entityTypes: EntityType[] };
+export type ConsincoProdutoApiVersion = 'V1' | 'V4';
+export type DataIngestionSettings = { id: string; companyId: string; consincoAutoAdjustEnabled: boolean; consincoProdutoApiVersion: ConsincoProdutoApiVersion; connectorDatabaseEnabled: boolean; consincoApiEnabled: boolean; spedEnabled: boolean; catalogReconciliationEnabled: boolean; fiscalValidationEnabled: boolean; entityTypes: EntityType[] };
 export type ReconciliationSummary = { total: number; matched: number; divergent: number; missingInCentral: number };
 
 export const dataIngestionService = {

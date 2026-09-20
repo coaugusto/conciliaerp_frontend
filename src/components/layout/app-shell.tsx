@@ -14,7 +14,7 @@ import { TabLink } from "./tab-link";
 import { TabViewport } from "./tab-viewport";
 import { TabsProvider } from "@/providers/tabs-provider";
 
-type ClientTenant = { id: string; name: string; cncCode: string };
+type ClientTenant = { id: string; name: string; cncCode: string; tradeName?: string | null };
 
 // `children` (a rota que o Next resolveu para a URL atual) não é mais usado como conteúdo — quem
 // decide o que aparece é o TabViewport (registro de abas). O prop continua aceito pela assinatura
@@ -115,7 +115,10 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
             <span className="shrink-0 font-semibold">Ambiente:</span>
             <span className="min-w-0 truncate font-medium text-slate-800">{tenantSearch || "Selecionar"}</span>
           </button>
-          <label className="hidden w-[21rem] items-center gap-2 rounded border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 lg:flex"><span className="whitespace-nowrap font-semibold">Ambiente:</span><input list="concilia-tenant-options" value={tenantSearch} onChange={event => handleTenantInputChange(event.target.value)} onBlur={event => selectTenantFromSearch(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); selectTenantFromSearch(event.currentTarget.value); } }} placeholder="Digite o nome ou CNC_CODE" aria-label="Buscar ambiente por nome ou CNC_CODE" className="min-w-0 flex-1 bg-transparent font-medium text-slate-800 outline-none"/><datalist id="concilia-tenant-options">{(tenants.data ?? []).map(tenant => <option key={tenant.id} value={`${tenant.name} · ${tenant.cncCode}`}>{tenant.id}</option>)}</datalist></label>
+          <label className="hidden w-[21rem] items-center gap-2 rounded border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 lg:flex"><span className="whitespace-nowrap font-semibold">Ambiente:</span><input type="search" name="concilia-tenant-search" list="concilia-tenant-options" autoComplete="off" data-1p-ignore data-lpignore="true" value={tenantSearch} onChange={event => handleTenantInputChange(event.target.value)} onBlur={event => selectTenantFromSearch(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); selectTenantFromSearch(event.currentTarget.value); } }} placeholder="Digite o nome ou CNC_CODE" aria-label="Buscar ambiente por nome ou CNC_CODE" className="min-w-0 flex-1 bg-transparent font-medium text-slate-800 outline-none"/>{/* Segunda linha da opção: nome fantasia (GE_EMPRESA.FANTASIA, via MAX_EMPRESA_V1) quando a carga
+    inicial já extraiu o cadastro da empresa — mais fácil de reconhecer o cliente real do que o
+    UUID interno, que só aparece como fallback enquanto isso não acontece. */}
+<datalist id="concilia-tenant-options">{(tenants.data ?? []).map(tenant => <option key={tenant.id} value={`${tenant.name} · ${tenant.cncCode}`}>{tenant.tradeName || tenant.id}</option>)}</datalist></label>
           <div className="hidden min-w-0 flex-1 truncate text-xs text-slate-500 xl:block">Início <span className="px-1">›</span> {activeItem?.label ?? "Concilia ERP"}</div>
           <div className="ml-auto flex items-center gap-3 text-xs text-slate-500">
             {user.role === "ADMIN" && <Link href="/documentation" className="hidden items-center gap-1.5 hover:text-[#176a84] md:flex"><BookOpen size={16} className="text-cyan-600" />Documentação</Link>}
@@ -163,7 +166,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
             </div>
             <label className="mx-3 mt-3 flex items-center gap-2 rounded border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs text-slate-600">
               <span className="whitespace-nowrap font-semibold">Ambiente:</span>
-              <input list="concilia-tenant-options" value={tenantSearch} onChange={event => handleTenantInputChange(event.target.value)} onBlur={event => selectTenantFromSearch(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); selectTenantFromSearch(event.currentTarget.value); } }} placeholder="Digite o nome ou CNC_CODE" aria-label="Buscar ambiente por nome ou CNC_CODE" className="min-w-0 flex-1 bg-transparent font-medium text-slate-800 outline-none"/>
+              <input type="search" name="concilia-tenant-search-mobile" list="concilia-tenant-options" autoComplete="off" data-1p-ignore data-lpignore="true" value={tenantSearch} onChange={event => handleTenantInputChange(event.target.value)} onBlur={event => selectTenantFromSearch(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); selectTenantFromSearch(event.currentTarget.value); } }} placeholder="Digite o nome ou CNC_CODE" aria-label="Buscar ambiente por nome ou CNC_CODE" className="min-w-0 flex-1 bg-transparent font-medium text-slate-800 outline-none"/>
             </label>
             <nav className="flex flex-col gap-1 px-2 py-3">
               {visibleNavigation.map((item) => {

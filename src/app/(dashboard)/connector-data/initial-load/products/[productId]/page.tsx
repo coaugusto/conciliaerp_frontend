@@ -4,7 +4,7 @@ import { Fragment, useState } from "react";
 import Link from "next/link";
 import { TabLink } from "@/components/layout/tab-link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Barcode, Boxes, Database, FileText, Pencil, Percent, PackageSearch, Save, Truck, X } from "lucide-react";
+import { ArrowLeft, Barcode, Boxes, Database, FileText, Pencil, Percent, PackageSearch, Save, Trash2, Truck, X } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader, PageLoader, SeverityBadge, dateTime, money } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
 import { fiscalComplianceService, type ImportedRecord, type TaxationOperationGroup } from "@/services/fiscal-compliance.service";
@@ -37,7 +37,7 @@ export default function InitialLoadProductDetailPage() {
 
     <div className="grid gap-5 xl:grid-cols-2">
       <DetailCard recordId={data.product.id} title="Cadastro do produto" entityType="MASTER_PRODUCTS_V1" fields={product} keys={["PRODUCT_DESCRIPTION", "NCM", "CEST", "FAMILY_DESCRIPTION", "FISCAL_PRODUCT_CODE"]} labels={{ PRODUCT_DESCRIPTION: "Descrição", NCM: "NCM", CEST: "CEST", FAMILY_DESCRIPTION: "Família", FISCAL_PRODUCT_CODE: "Código fiscal" }} queryId={id} />
-      <DetailCard recordId={data.product.id} title="Tributação (PIS/COFINS/IPI)" entityType="MASTER_PRODUCTS_V1" fields={product} keys={["PIS_CST", "PIS_CST_OUT", "COFINS_CST", "COFINS_CST_OUT", "IPI_CST"]} labels={{ PIS_CST: "CST PIS (Entrada)", PIS_CST_OUT: "CST PIS (Saída)", COFINS_CST: "CST COFINS (Entrada)", COFINS_CST_OUT: "CST COFINS (Saída)", IPI_CST: "CST IPI" }} queryId={id} />
+      <DetailCard recordId={data.product.id} title="Tributação (PIS/COFINS/IPI)" entityType="MASTER_PRODUCTS_V1" fields={product} keys={["PIS_CST", "PIS_CST_OUT", "COFINS_CST", "COFINS_CST_OUT", "IPI_CST", "CODNATREC", "SEQNATREC"]} labels={{ PIS_CST: "CST PIS (Entrada)", PIS_CST_OUT: "CST PIS (Saída)", COFINS_CST: "CST COFINS (Entrada)", COFINS_CST_OUT: "CST COFINS (Saída)", IPI_CST: "CST IPI", CODNATREC: "Natureza da Receita (código)", SEQNATREC: "Natureza da Receita (sequencial)" }} queryId={id} />
     </div>
 
     <AccessCodesSection productId={id} records={data.accessCodes} queryId={id} />
@@ -114,9 +114,16 @@ function AccessCodesSection({ productId, records, queryId }: { productId: string
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [code, setCode] = useState("");
+  const [removed, setRemoved] = useState<string | null>(null);
   const add = useMutation({
     mutationFn: () => fiscalComplianceService.addAccessCode(productId, code),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["fiscal-compliance-product", queryId] }); setAdding(false); setCode(""); },
+  });
+  // O backend só oferece `action` quando sobra outro código do mesmo tipo — assim o produto nunca
+  // fica sem código de acesso por causa desta tela.
+  const remove = useMutation({
+    mutationFn: (recordId: string) => fiscalComplianceService.deleteAccessCode(productId, recordId),
+    onSuccess: (result) => { queryClient.invalidateQueries({ queryKey: ["fiscal-compliance-product", queryId] }); setRemoved(result.erpSync === "QUEUED" ? `Código ${result.accessCode} excluído. A exclusão foi enviada para o ERP e aguarda a autorização no Connector.` : `Código ${result.accessCode} excluído do cadastro importado. A atualização automática via API Consinco não está autorizada, então o ERP não foi alterado.`); },
   });
   return <Card className="mt-5 overflow-hidden">
     <div className="flex items-center gap-2 border-b border-slate-200 p-4">
@@ -135,7 +142,15 @@ function AccessCodesSection({ productId, records, queryId }: { productId: string
       </div>
     )}
     {!records.length ? <p className="p-5 text-sm text-slate-500">Nenhum código de acesso do tipo EAN utilizado para venda foi recebido para este produto.</p>
-      : <div className="divide-y divide-slate-100">{records.map(record => <RecordRow key={record.id} entityType="PRODUCT_ACCESS_CODES_V1" record={record} queryId={queryId} />)}</div>}
+      : <div className="divide-y divide-slate-100">{records.map(record => <div key={record.id}>
+        {record.action && <div className="flex flex-wrap items-center justify-end gap-2 px-4 pt-3 text-xs">
+          {record.duplicate && <span className="mr-auto rounded-full bg-amber-100 px-2 py-0.5 font-semibold text-amber-800">Código repetido</span>}
+          <Button variant="danger" disabled={remove.isPending} onClick={() => { if (confirm(`Excluir o código ${text(record.payload, "ACCESS_CODE")} deste produto? O produto permanece; apenas este código de acesso é removido, aqui e no ERP.`)) remove.mutate(record.id); }}><Trash2 size={15} />{remove.isPending ? "Excluindo…" : "Excluir código"}</Button>
+        </div>}
+        <RecordRow entityType="PRODUCT_ACCESS_CODES_V1" record={record} queryId={queryId} />
+      </div>)}</div>}
+    {removed && <p className="border-t border-slate-200 bg-emerald-50 p-3 text-sm text-emerald-800">{removed}</p>}
+    {remove.isError && <p className="border-t border-slate-200 bg-red-50 p-3 text-sm text-red-700">{getApiErrorMessage(remove.error)}</p>}
   </Card>;
 }
 

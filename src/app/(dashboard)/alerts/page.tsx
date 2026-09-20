@@ -2,12 +2,12 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { ArrowRight, Building2, Check, CheckCircle2, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Download, Edit3, FileText, FileWarning, Info, Layers3, LoaderCircle, PackageSearch, Search, Send, ShieldAlert, ShieldCheck, Upload, X } from "lucide-react";
+import { Building2, Check, CheckCircle2, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Download, Edit3, FileText, FileWarning, Layers3, LoaderCircle, PackageSearch, Search, ShieldAlert, ShieldCheck, Upload } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader, PageLoader, money } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
 import { fiscalComplianceService } from "@/services/fiscal-compliance.service";
 import { useTabSearchParams } from "@/providers/tabs-provider";
-import { fiscalAlertsService, type FiscalAlertEntity, type FiscalAlertGroup, type FiscalAlertItem, type FiscalAlertSeverity, type FiscalSuggestionReference } from "@/services/fiscal-alerts.service";
+import { fiscalAlertsService, type FiscalAlertEntity, type FiscalAlertGroup, type FiscalAlertItem, type FiscalAlertSeverity, type FiscalSuggestionReference, type SpedAlertContext } from "@/services/fiscal-alerts.service";
 import { exportAlertsWorkbook } from "./export";
 import { readAlertsWorkbook } from "./import";
 
@@ -70,29 +70,114 @@ export default function FiscalAlertsPage(){
 function AlertCard({group,selected,select}:{group:FiscalAlertGroup;selected:boolean;select:()=>void}){
   if(group.kind==="COMPLIANCE")return <button type="button" onClick={select} className="text-left"><Card className={`h-full border-emerald-200 bg-emerald-50/60 p-5 transition hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-md ${selected?"border-emerald-600 ring-2 ring-emerald-100":""}`}><div className="flex items-start justify-between gap-3"><span className="grid size-10 place-items-center rounded-lg bg-emerald-100 text-emerald-700"><ShieldCheck size={20}/></span><span className="rounded-full border border-emerald-300 bg-white px-2 py-0.5 text-xs font-semibold text-emerald-800">Em conformidade</span></div><strong className="mt-4 block text-slate-900">{group.title}</strong><p className="mt-1 min-h-10 text-sm text-slate-600">{group.description}</p><div className="mt-4 flex items-end justify-between"><span><b className="block text-2xl text-emerald-800">{group.affected}</b><small className="text-slate-500">produtos em conformidade</small></span><span className="text-xs font-semibold text-emerald-700">Ver produtos →</span></div></Card></button>;
   return <button type="button" onClick={select} className="text-left"><Card className={`h-full p-5 transition hover:-translate-y-0.5 hover:border-cyan-400 hover:shadow-md ${selected?"border-cyan-600 ring-2 ring-cyan-100":""}`}><div className="flex items-start justify-between gap-3"><span className="grid size-10 place-items-center rounded-lg bg-cyan-50 text-cyan-700"><EntityIcon entity={group.entity}/></span><span className={`rounded-full border px-2 py-0.5 text-xs font-semibold ${severityStyle[group.severity]}`}>{severityLabel[group.severity]}</span></div><strong className="mt-4 block text-slate-900">{group.title}</strong><p className="mt-1 min-h-10 text-sm text-slate-500">{group.description}</p>{!!group.estimatedImpact&&<p className="mt-2 text-sm font-semibold text-red-700">Impacto estimado: {money(group.estimatedImpact)}</p>}{!!group.highlight&&<p className="mt-2 text-sm font-semibold text-amber-800">{group.highlight.label}: {money(group.highlight.value)}</p>}<div className="mt-4 flex items-end justify-between"><span><b className="block text-2xl text-slate-900">{group.affected}</b><small className="text-slate-500">registros afetados</small></span><span className="text-xs font-semibold text-cyan-700">Ver De/Para →</span></div></Card></button>}
-const ALERT_ITEMS_PAGE_SIZE=20;
-function AlertItems({group,search}:{group:FiscalAlertGroup;search:string}){
-  const term=search.trim().toLocaleLowerCase("pt-BR");
-  const filtered=group.items.filter(item=>!term||`${item.code} ${item.description} ${item.currentValue} ${item.suggestedValue} ${item.source} ${Object.values(item.suggestionReference??{}).join(" ")}`.toLocaleLowerCase("pt-BR").includes(term));
-  const [page,setPage]=useState(1);
-  useEffect(()=>{setPage(1);},[group.id,term]);
-  const pageCount=Math.max(1,Math.ceil(filtered.length/ALERT_ITEMS_PAGE_SIZE));
-  const currentPage=Math.min(page,pageCount);
-  const items=filtered.slice((currentPage-1)*ALERT_ITEMS_PAGE_SIZE,currentPage*ALERT_ITEMS_PAGE_SIZE);
-  return <div>{items.map(item=>{
-    const catalogId=item.productId??item.maintenanceId;
-    const rawHref=item.href??(catalogId?`/catalog-review?productId=${encodeURIComponent(catalogId)}&code=${encodeURIComponent(item.code)}`:null);
-    const href=rawHref?`${rawHref}${rawHref.includes("?")?"&":"?"}from=alerts`:null;
-    return <div key={item.id} className="border-b border-slate-100 p-5 last:border-0">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3"><div><strong className="text-slate-900">{item.description}</strong><p className="font-mono text-xs text-slate-500">{item.code}</p></div><div className="flex flex-wrap items-center gap-2">{group.kind!=="COMPLIANCE"&&<span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">{item.confidence}% de confiança</span>}{href?<Link href={href} className="inline-flex h-9 items-center gap-2 rounded-lg bg-cyan-700 px-3 text-sm font-semibold text-white hover:bg-cyan-800"><Edit3 size={15}/>{group.kind==="COMPLIANCE"?"Ver produto":"Abrir manutenção"}</Link>:<span title="Este item ainda não está disponível na tela de manutenção" className="inline-flex h-9 items-center gap-2 rounded-lg bg-slate-100 px-3 text-sm font-medium text-slate-500"><Edit3 size={15}/>Sem manutenção disponível</span>}</div></div>
-      {group.kind==="COMPLIANCE"?<div className="grid items-stretch gap-3 md:grid-cols-2"><Comparison label="Encontrado nas notas fiscais" value={item.currentValue} tone="suggested"/><Comparison label="Regra atendida" value={item.suggestedValue} tone="suggested"/></div>:<div className="grid items-stretch gap-3 md:grid-cols-[1fr_auto_1fr]"><Comparison label="De · situação atual" value={item.currentValue} tone="current"/><span className="grid place-items-center text-cyan-600"><ArrowRight size={20}/></span><SuggestionComparison item={item}/></div>}
-      {item.suggestionReference?.sourceUrl?.startsWith("https://cosmos.bluesoft.com.br/pesquisar?q=")&&<div className="mt-3"><a href={item.suggestionReference.sourceUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-9 items-center rounded-lg border border-cyan-700 px-3 text-sm font-semibold text-cyan-800 hover:bg-cyan-50">Consultar no Cosmos ↗</a><p className="mt-1 text-xs text-slate-500">Abre a pesquisa em outra aba. Confira marca, sabor, peso e embalagem; depois use Abrir manutenção para corrigir o cadastro.</p></div>}
-      {item.spedContext&&<div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950"><b>{item.spedContext.bookkeeping==="EFD_CONTRIBUTIONS"?"EFD-Contribuições":"EFD ICMS/IPI"}</b><span className="ml-2">Registro {item.spedContext.record||"não identificado"}{item.spedContext.parentRecord?` · pai ${item.spedContext.parentRecord}`:""}{item.spedContext.line?` · linha ${item.spedContext.line}`:""}</span><p className="mt-1 text-xs">Registros relacionados: {item.spedContext.relatedRecords.join(", ")||"consultar registro de origem"}</p>{item.spedContext.sourceFile&&<p className="mt-1 font-mono text-xs">{item.spedContext.sourceFile}</p>}</div>}
-      {item.actionable===false?<p className="mt-3 text-xs text-slate-500">{item.nonActionableReason??"A correção deve ser realizada na origem da escrituração e o arquivo SPED deve ser validado novamente."}</p>:<AdjustmentActions group={group} item={item}/>}
-    </div>;
-  })}{!items.length&&<p className="p-8 text-center text-sm text-slate-500">Nenhum registro corresponde à pesquisa.</p>}
-  {filtered.length>ALERT_ITEMS_PAGE_SIZE&&<AlertItemsPagination page={currentPage} pageCount={pageCount} total={filtered.length} setPage={setPage}/>}
+/** Findings com sugestão determinística e centenas/milhares de registros (LC 224/2025 etc.) — revisar
+ * item a item não é viável. Lista compacta pra conferência visual rápida rolando a tela, mais o botão
+ * de aprovar tudo de uma vez (backend reprocessa a finding inteira, não só os `group.items` — que vêm
+ * limitados a 100 pra não pesar a tela). */
+function BulkApproveBar({group,onDone}:{group:FiscalAlertGroup;onDone:()=>void}){
+  const bulk=useMutation({mutationFn:()=>fiscalAlertsService.bulkQueueRegistration(group.bulkQueueCode!)});
+  // Some da pendência assim que o lote é aceito — não espera o próximo refetch/expirar o cache
+  // pra sumir da tela, senão pareceria que "aprovar todos" não fez nada até recarregar a página.
+  useEffect(()=>{if(bulk.isSuccess)onDone();},[bulk.isSuccess,onDone]);
+  const confirmAndRun=()=>{if(confirm(`Aprovar a sugestão para os ${group.affected} registro(s) desta pendência? Cada um ainda precisa da confirmação do usuário logado no Connector antes de gravar no ERP.`))bulk.mutate();};
+  if(bulk.isSuccess)return <div role="status" className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800"><CheckCircle2 size={17}/>{bulk.data.queued} de {bulk.data.total} enviado(s) para a fila de integração.{bulk.data.skipped.length>0&&` ${bulk.data.skipped.length} pulado(s) (cadastro incompleto).`}</div>;
+  return <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-cyan-200 bg-cyan-50 p-3">
+    <p className="text-sm text-cyan-900">São {group.affected} registros — revisão item a item não é prática aqui. Confira a lista abaixo e aprove tudo de uma vez.</p>
+    <Button onClick={confirmAndRun} disabled={bulk.isPending}>{bulk.isPending?<LoaderCircle size={16} className="animate-spin"/>:<Check size={16}/>} {bulk.isPending?"Enviando...":`Aprovar todos (${group.affected})`}</Button>
+    {bulk.isError&&<p role="alert" className="w-full text-sm text-red-700">{getApiErrorMessage(bulk.error)}</p>}
   </div>;
+}
+/** Linha da lista compacta — um padrão único pra todo card de /alerts (cadastro, Cosmos, SPED,
+ * conformidade), pensado pra rolar rápido quando o volume é grande (centenas/milhares de itens),
+ * em vez do card grande antigo por item. Cada linha resolve sozinha sua ação (aprovar, editar valor,
+ * abrir Cosmos, ver detalhes) sem afetar as demais. */
+function AlertRow({group,item,onSent}:{group:FiscalAlertGroup;item:FiscalAlertItem;onSent:(id:string)=>void}){
+  const isCompliance=group.kind==="COMPLIANCE";
+  // BARCODE_MISSING/BARCODE_INVALID_CHECK_DIGIT chegam com actionable:false (o backend, ao
+  // enriquecer com o Cosmos, desliga o fluxo antigo de digitar às cegas) — mas erpField continua
+  // presente, e o Cosmos já traz candidatos como referência. Continuam acionáveis aqui: o analista
+  // confere o(s) candidato(s) (link Cosmos) e digita o GTIN escolhido, igual a NCM/CEST.
+  const isNewBarcode=group.id==="BARCODE_MISSING";
+  const nonActionable=item.actionable===false&&!item.erpField;
+  // Cadastro sem sugestão pronta (NCM/CEST) ou código de barras (o valor sugerido do Cosmos é uma
+  // lista de candidatos pra conferência, não um GTIN pronto pra gravar) — a linha já abre em edição.
+  const needsManualValue=Boolean(item.erpField)&&(!item.suggestedValue||item.erpField==="BARCODE");
+  const [editing,setEditing]=useState(needsManualValue);
+  const [value,setValue]=useState(needsManualValue?"":item.suggestedValue);
+  const queue=useMutation({mutationFn:async()=>isNewBarcode
+    ?fiscalComplianceService.addAccessCode(item.productId??item.code,value.trim())
+    :item.erpField
+    ?fiscalAlertsService.queueRegistration({productId:item.productId??item.code,field:item.erpField,currentValue:item.currentValue,newValue:value.trim(),groupId:group.id})
+    :fiscalAlertsService.queueAdjustment({groupId:group.id,itemId:item.id,field:group.field,value:value.trim(),decision:editing?"EDITED":"ACCEPTED"})});
+  // Some da pendência assim que o envio é aceito — sem esperar o próximo refetch da lista inteira,
+  // senão o item continuaria aparecendo como pendente mesmo já enviado (individual ou em massa).
+  useEffect(()=>{if(queue.isSuccess)onSent(item.id);},[queue.isSuccess,item.id,onSent]);
+  const cosmosUrl=item.suggestionReference?.sourceUrl?.startsWith("https://cosmos.bluesoft.com.br/pesquisar?q=")?item.suggestionReference.sourceUrl:undefined;
+  const catalogId=item.productId??item.maintenanceId;
+  const rawHref=item.href??(catalogId?`/catalog-review?productId=${encodeURIComponent(catalogId)}&code=${encodeURIComponent(item.code)}`:null);
+  const href=rawHref?`${rawHref}${rawHref.includes("?")?"&":"?"}from=alerts`:null;
+  const hasTooltip=Boolean(item.suggestionReference)||Boolean(item.spedContext);
+  return <tr className="border-b border-slate-100 align-top last:border-0 hover:bg-slate-50">
+    <td className="p-3"><strong className="block text-slate-900">{item.description}</strong><span className="font-mono text-xs text-slate-500">{item.code}</span></td>
+    <td className="p-3 font-mono text-xs text-slate-700">{item.ncm||"—"}</td>
+    <td className="max-w-xs p-3 text-red-700">{item.currentValue}</td>
+    <td className="max-w-xs p-3">
+      {editing&&!queue.isSuccess
+        ?<div><input autoFocus value={value} onChange={event=>setValue(event.target.value)} placeholder="Novo valor" className="h-8 w-full min-w-28 rounded-lg border border-slate-300 px-2 text-xs outline-none focus:border-cyan-600"/>
+          {item.erpField==="BARCODE"&&item.suggestedValue&&<p className="mt-1 text-[11px] text-slate-500">Cosmos: {item.suggestedValue}</p>}
+        </div>
+        :<span tabIndex={hasTooltip?0:undefined} aria-describedby={hasTooltip?`sugg-${item.id}`:undefined} className={`${hasTooltip?"group relative outline-none":""} font-semibold text-emerald-700`}>{value||item.suggestedValue||"—"}{hasTooltip&&<SuggestionDetails id={`sugg-${item.id}`} source={item.source} reference={item.suggestionReference} spedContext={item.spedContext}/>}</span>}
+    </td>
+    <td className="p-3 text-right">
+      {isCompliance?<span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"><ShieldCheck size={14}/>Conforme</span>
+       :queue.isSuccess?<span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"><CheckCircle2 size={14}/>Enviado</span>
+       :nonActionable?<span className="text-xs text-slate-500" title={item.nonActionableReason}>Não acionável</span>
+       :<div className="inline-flex flex-col items-end gap-1">
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            {cosmosUrl&&<a href={cosmosUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1 rounded-lg border border-cyan-300 px-2 text-xs font-semibold text-cyan-800 hover:bg-cyan-50" title="Consultar no Cosmos — confira marca, sabor, peso e embalagem">Cosmos ↗</a>}
+            {href&&<Link href={href} className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-300 px-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"><Edit3 size={13}/>Detalhes</Link>}
+            {!needsManualValue&&!editing&&<Button variant="secondary" onClick={()=>setEditing(true)} className="h-8 px-2.5 text-xs"><Edit3 size={13}/>Editar</Button>}
+            <Button onClick={()=>queue.mutate()} disabled={queue.isPending||!value.trim()} className="h-8 px-2.5 text-xs">{queue.isPending?<LoaderCircle size={13} className="animate-spin"/>:<Check size={13}/>}{editing?"Enviar":"Aprovar"}</Button>
+          </div>
+          {queue.isError&&<span className="max-w-56 text-right text-[11px] text-red-700">{getApiErrorMessage(queue.error)}</span>}
+        </div>}
+    </td>
+  </tr>;
+}
+function AlertItemsTable({group,search}:{group:FiscalAlertGroup;search:string}){
+  // Itens enviados (individual ou "Aprovar todos") somem da lista na hora — sem isso, a pendência
+  // continuaria mostrando algo já resolvido até o próximo refetch/expirar o cache do resumo inteiro.
+  const [sentIds,setSentIds]=useState<Set<string>>(new Set());
+  const markSent=(id:string)=>setSentIds(previous=>previous.has(id)?previous:new Set(previous).add(id));
+  const term=search.trim().toLocaleLowerCase("pt-BR");
+  const filtered=group.items.filter(item=>!sentIds.has(item.id)&&(!term||`${item.code} ${item.description} ${item.ncm??""} ${item.currentValue} ${item.suggestedValue} ${item.source} ${Object.values(item.suggestionReference??{}).join(" ")}`.toLocaleLowerCase("pt-BR").includes(term)));
+  // Reseta a página (e os itens marcados como enviados) quando o grupo ou a busca mudam — ajuste de
+  // estado durante a renderização (em vez de useEffect+setState) pra não disparar uma renderização
+  // em cascata desnecessária.
+  const resetKey=`${group.id}:${term}`;
+  const [pageState,setPageState]=useState({page:1,key:resetKey});
+  if(pageState.key!==resetKey){setPageState({page:1,key:resetKey});if(sentIds.size)setSentIds(new Set());}
+  const page=pageState.page;
+  const setPage=(nextPage:number)=>setPageState({page:nextPage,key:resetKey});
+  const pageSize=50;
+  const pageCount=Math.max(1,Math.ceil(filtered.length/pageSize));
+  const currentPage=Math.min(page,pageCount);
+  const items=filtered.slice((currentPage-1)*pageSize,currentPage*pageSize);
+  // "Aprovar todos" cobre a pendência inteira no backend (não só os itens carregados aqui) — some
+  // com tudo que está na tela de uma vez.
+  const markAllSent=()=>setSentIds(new Set(group.items.map(item=>item.id)));
+  return <div>
+    {group.bulkQueueCode&&!!filtered.length&&<div className="p-5 pb-0"><BulkApproveBar group={group} onDone={markAllSent}/></div>}
+    <div className="overflow-x-auto"><table className="w-full text-left text-sm">
+      <thead><tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500"><th className="p-3">Produto</th><th className="p-3">NCM</th><th className="p-3">De</th><th className="p-3">Para</th><th className="p-3">Ações</th></tr></thead>
+      <tbody>{items.map(item=><AlertRow key={item.id} group={group} item={item} onSent={markSent}/>)}</tbody>
+    </table>{!items.length&&<p className="p-8 text-center text-sm text-slate-500">{sentIds.size?"Todos os registros carregados aqui já foram enviados.":"Nenhum registro corresponde à pesquisa."}</p>}</div>
+    {filtered.length>pageSize&&<AlertItemsPagination page={currentPage} pageCount={pageCount} total={filtered.length} setPage={setPage}/>}
+    {group.affected>group.items.length&&<p className="border-t border-slate-100 p-3 text-center text-xs text-slate-500">Mostrando {group.items.length} de {group.affected} registros{group.bulkQueueCode?" — o botão \"Aprovar todos\" acima cobre todos, não só os listados aqui.":" — a planilha \"Baixar\" traz a lista completa."}</p>}
+  </div>;
+}
+function AlertItems({group,search}:{group:FiscalAlertGroup;search:string}){
+  return <AlertItemsTable group={group} search={search}/>;
 }
 function AlertItemsPagination({page,pageCount,total,setPage}:{page:number;pageCount:number;total:number;setPage:(page:number)=>void}){
   return <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 p-4">
@@ -105,29 +190,9 @@ function AlertItemsPagination({page,pageCount,total,setPage}:{page:number;pageCo
     </div>
   </div>;
 }
-function Comparison({label,value,tone}:{label:string;value:string;tone:"current"|"suggested"}){return <div className={`rounded-lg border p-4 ${tone==="current"?"border-red-200 bg-red-50":"border-emerald-200 bg-emerald-50"}`}><p className={`text-xs font-semibold uppercase tracking-wide ${tone==="current"?"text-red-700":"text-emerald-700"}`}>{label}</p><strong className="mt-1 block text-slate-900">{value}</strong></div>}
-function SuggestionComparison({item}:{item:FiscalAlertItem}){
-  return <div tabIndex={0} aria-describedby={`suggestion-${item.id}`} className="group relative rounded-lg border border-emerald-200 bg-emerald-50 p-4 outline-none focus-visible:ring-2 focus-visible:ring-emerald-600">
-    <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-emerald-700">Para · sugestão <Info size={14} aria-hidden="true"/></p><strong className="mt-1 block text-slate-900">{item.suggestedValue}</strong><span className="mt-2 block text-[11px] text-emerald-800">Passe o mouse para entender a sugestão</span>
-    <SuggestionDetails id={`suggestion-${item.id}`} source={item.source} reference={item.suggestionReference}/>
-  </div>;
-}
-function SuggestionDetails({id,source,reference}:{id:string;source:string;reference?:FiscalSuggestionReference}){
+function SuggestionDetails({id,source,reference,spedContext}:{id:string;source:string;reference?:FiscalSuggestionReference;spedContext?:SpedAlertContext}){
   const rows=[["Tabela de referência",reference?.table],["Origem",reference?.origin??source],["Estado do cliente",reference?.clientState],["Regra aplicada",reference?.rule],["Motivo",reference?.reason]];
-  return <div id={id} role="tooltip" className="pointer-events-none invisible absolute bottom-[calc(100%+8px)] left-0 z-20 w-full min-w-72 translate-y-1 rounded-lg bg-slate-900 p-4 text-left normal-case text-white opacity-0 shadow-xl transition group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus:visible group-focus:translate-y-0 group-focus:opacity-100"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-cyan-300">Referência da sugestão</p><dl className="grid gap-2">{rows.map(([label,value])=><div key={label}><dt className="text-[11px] text-slate-400">{label}</dt><dd className="text-xs font-medium">{value||"Não informado pela regra"}</dd></div>)}</dl><span className="absolute -bottom-1 left-6 size-2 rotate-45 bg-slate-900"/></div>;
-}
-function AdjustmentActions({group,item}:{group:FiscalAlertGroup;item:FiscalAlertItem}){
-  // Alerta de cadastro (NCM/CEST/código de barras) não tem valor sugerido — quem analisa digita o
-  // valor correto, então já abre em edição e vai pela rota que monta o JSON Patch da API Consinco.
-  const [mode,setMode]=useState<"ACCEPTED"|"EDITED"|null>(item.erpField&&!item.suggestedValue?"EDITED":null);
-  const [value,setValue]=useState(item.suggestedValue);
-  const queue=useMutation({mutationFn:()=>item.erpField
-    ?fiscalAlertsService.queueRegistration({productId:item.productId??item.code,field:item.erpField,currentValue:item.currentValue,newValue:value.trim(),groupId:group.id})
-    :fiscalAlertsService.queueAdjustment({groupId:group.id,itemId:item.id,field:group.field,value:value.trim(),decision:mode!}),onSuccess:()=>setMode(null)});
-  if(queue.isSuccess)return <div role="status" className="mt-4 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800"><CheckCircle2 size={17}/>Ajuste enviado para a fila de integração.</div>;
-  return <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
-    {!mode?<div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-slate-600">Qual decisão deve seguir para a integração?</p><div className="flex flex-wrap gap-2"><Button onClick={()=>{setValue(item.suggestedValue);setMode("ACCEPTED");}}><Check size={16}/>Acatar sugestão</Button><Button variant="secondary" onClick={()=>setMode("EDITED")}><Edit3 size={16}/>Editar informação</Button></div></div>:<div className="grid gap-3"><label className="grid gap-1 text-sm font-semibold text-slate-700">{item.erpField?`Valor que será gravado no ERP (${item.erpField})`:"Valor que será integrado"}<input autoFocus={mode==="EDITED"} value={value} onChange={event=>{setValue(event.target.value);setMode("EDITED");}} readOnly={mode==="ACCEPTED"} className={`h-10 rounded-lg border border-slate-300 px-3 font-normal outline-none focus:border-cyan-600 ${mode==="ACCEPTED"?"bg-emerald-50":"bg-white"}`}/></label><div className="flex flex-wrap items-center justify-between gap-2"><span className="text-xs text-slate-500">{item.erpField?"O ajuste só é gravado depois da autorização do usuário logado no Connector.":mode==="ACCEPTED"?"Sugestão acatada sem alterações.":"Valor ajustado manualmente pelo analista."}</span><div className="flex gap-2"><Button variant="ghost" onClick={()=>{setMode(null);setValue(item.suggestedValue);}} disabled={queue.isPending}><X size={15}/>Cancelar</Button><Button onClick={()=>queue.mutate()} disabled={queue.isPending||!value.trim()}><Send size={15}/>{queue.isPending?"Enviando...":"Enviar para integração"}</Button></div></div></div>}
-    {queue.isError&&<p role="alert" className="mt-3 text-sm text-red-700">{getApiErrorMessage(queue.error)}</p>}
-  </div>;
+  if(spedContext)rows.push(["Escrituração",spedContext.bookkeeping==="EFD_CONTRIBUTIONS"?"EFD-Contribuições":"EFD ICMS/IPI"],["Registro",[spedContext.record,spedContext.parentRecord&&`pai ${spedContext.parentRecord}`,spedContext.line&&`linha ${spedContext.line}`].filter(Boolean).join(" · ")||undefined],["Registros relacionados",spedContext.relatedRecords.join(", ")||undefined],["Arquivo",spedContext.sourceFile]);
+  return <div id={id} role="tooltip" className="pointer-events-none invisible absolute bottom-[calc(100%+8px)] left-0 z-20 w-72 translate-y-1 rounded-lg bg-slate-900 p-4 text-left normal-case text-white opacity-0 shadow-xl transition group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus:visible group-focus:translate-y-0 group-focus:opacity-100"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-cyan-300">Referência da sugestão</p><dl className="grid gap-2">{rows.map(([label,value])=><div key={label}><dt className="text-[11px] text-slate-400">{label}</dt><dd className="text-xs font-medium">{value||"Não informado pela regra"}</dd></div>)}</dl><span className="absolute -bottom-1 left-6 size-2 rotate-45 bg-slate-900"/></div>;
 }
 function EntityIcon({entity}:{entity:FiscalAlertEntity}){if(entity==="PRODUCT")return <PackageSearch size={20}/>;if(entity==="TAXATION")return <ShieldAlert size={20}/>;if(entity==="SPED")return <FileWarning size={20}/>;if(entity==="DOCUMENT")return <FileText size={20}/>;if(entity==="FAMILY")return <Layers3 size={20}/>;return <Building2 size={20}/>}
