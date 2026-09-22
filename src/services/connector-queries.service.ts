@@ -44,4 +44,5 @@ export const connectorQueriesService = {
   createRecurringSchedule: async (id: string, data: { connectorId: string; companyId: string; startAt: string; frequency: "DAILY" | "HOURLY" | "MINUTES"; intervalMinutes?: number; parameters?: Record<string, unknown> }) => (await api.post<ApiResponse<ConnectorSchedule>>(`/connector-queries/${id}/schedules`, { ...data, parameters: data.parameters ?? {} })).data.data,
   setScheduleActive: async (id: string, active: boolean) => (await api.patch<ApiResponse<ConnectorSchedule>>(`/connector-queries/schedules/${id}/active`, { active })).data.data,
   startInitialLoad: async (connectorId: string, companyId: string) => (await api.post<ApiResponse<ConnectorInitialLoad> | ConnectorInitialLoad>("/connector-initial-loads", { connectorId, companyId })).data,
+  cancelJob: async (jobId: string) => (await api.post<ApiResponse<ConnectorJob>>(`/connector-queries/jobs/${jobId}/cancel`)).data.data,
 };
