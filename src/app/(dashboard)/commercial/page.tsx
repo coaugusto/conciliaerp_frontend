@@ -22,6 +22,11 @@ function maskKey(value: string) {
 export default function CommercialPortal() {
   const { user } = useAuth();
   const canInstallConnector = user?.role === "ADMIN" || user?.role === "COMPANY_ADMIN";
+  // Analista (staff da Concilia associado a vários clientes) só acompanha parâmetros contratados e
+  // sugestões de ajuste — cadastro de cliente e instalação/ativação do Connector ficam restritos a
+  // ADMIN/administrador do cliente, mesmo escopo já aplicado no backend (tenants.controller.ts,
+  // commercial.controller.ts).
+  const isAnalyst = user?.role === "ANALYST";
   const connectorRelease = useQuery({ queryKey: ["connector-desktop-release"], queryFn: connectorDesktopService.release, enabled: canInstallConnector });
   const [key, setKey] = useState<string>();
   const [copied, setCopied] = useState(false);
@@ -52,10 +57,14 @@ export default function CommercialPortal() {
     setCopied(true);
   };
 
+  const allTabs: Array<[typeof activeTab, string]> = [["registration", "Cadastros"], ["parameters", "Parâmetros"], ["connector", "Connector"], ["adjustments", "Sugestão de Ajustes"]];
+  const visibleTabs = isAnalyst ? allTabs.filter(([value]) => value === "parameters" || value === "adjustments") : allTabs;
+  const effectiveTab = visibleTabs.some(([value]) => value === activeTab) ? activeTab : visibleTabs[0][0];
+
   return <>
     <PageHeader title="Portal do Cliente" description="Baixe o agente local, configure os serviços e gere sua chave de ativação." />
-    <div role="tablist" aria-label="Áreas do Portal do Cliente" className="mb-6 flex max-w-5xl gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1.5 print:hidden">{[["registration", "Cadastros"], ["parameters", "Parâmetros"], ["connector", "Connector"], ["adjustments", "Sugestão de Ajustes"]].map(([value, label]) => <button key={value} role="tab" aria-selected={activeTab === value} onClick={() => setActiveTab(value as typeof activeTab)} className={`min-w-32 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${activeTab === value ? "bg-white text-cyan-800 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`}>{label}</button>)}</div>
-    {activeTab === "registration" && <div role="tabpanel" className="max-w-5xl">
+    <div role="tablist" aria-label="Áreas do Portal do Cliente" className="mb-6 flex max-w-5xl gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-slate-50 p-1.5 print:hidden">{visibleTabs.map(([value, label]) => <button key={value} role="tab" aria-selected={effectiveTab === value} onClick={() => setActiveTab(value)} className={`min-w-32 flex-1 rounded-lg px-4 py-2.5 text-sm font-semibold transition ${effectiveTab === value ? "bg-white text-cyan-800 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:bg-white/70 hover:text-slate-800"}`}>{label}</button>)}</div>
+    {effectiveTab === "registration" && <div role="tabpanel" className="max-w-5xl">
     <TabDropdown title="Cadastro do cliente" description="Crie um cliente e gere seu CNC_CODE." defaultOpen>
     <Card className="mb-5 max-w-3xl p-5"><div><p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Cadastro de cliente</p><h2 className="mt-1 text-lg font-bold text-slate-900">Criar cliente e CNC_CODE</h2><p className="mt-1 text-sm text-slate-500">Informe o nome. O CNC_CODE exclusivo será gerado automaticamente, gravado na API e selecionado para seu usuário.</p></div><div className="mt-5 grid gap-4 sm:grid-cols-2"><label className="text-sm font-semibold text-slate-700">Nome do cliente<input value={newClientName} onChange={event => setNewClientName(event.target.value)} className="mt-1.5 h-11 w-full rounded-lg border border-slate-300 px-3 font-normal" placeholder="Razão social ou nome fantasia" /></label><div className="text-sm font-semibold text-slate-700">CNC_CODE<div className="mt-1.5 flex h-11 items-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-3 font-mono text-sm font-normal text-slate-500">Gerado automaticamente</div></div></div><Button className="mt-5" onClick={() => createClient.mutate()} disabled={createClient.isPending || !newClientName.trim()}>{createClient.isPending ? "Criando cliente..." : "Criar cliente"}</Button>{createClient.isError && <ErrorState message="Não foi possível criar o cliente." />}</Card>
     </TabDropdown>
@@ -63,8 +72,8 @@ export default function CommercialPortal() {
     {tenantId && user?.role === "ADMIN" && <TabDropdown title="Usuários do cliente" description="Cadastre, edite e reenvie convites de acesso."><ClientUsersCard tenantId={tenantId} /></TabDropdown>}
     {tenantId && canInstallConnector && <TabDropdown title="Identidade para o Connector portátil" description="Gere os dados de tenant e a identidade do Connector para o agent-config.seed.json."><ConnectorSeedCard tenantId={tenantId} tenantName={tenantName} tenantSlug={cncCode} /></TabDropdown>}
     </div>}
-    {activeTab === "parameters" && <div role="tabpanel" className="max-w-5xl"><TabDropdown title="Serviços contratados" description="Defina as rotinas autorizadas para o cliente." defaultOpen>{tenantId && canInstallConnector ? <ClientServicesCard key={tenantId} tenantId={tenantId} /> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente e confirme seu perfil de administrador para configurar os serviços contratados.</Card>}</TabDropdown></div>}
-    {activeTab === "connector" && <div role="tabpanel" className="max-w-5xl">
+    {effectiveTab === "parameters" && <div role="tabpanel" className="max-w-5xl"><TabDropdown title="Serviços contratados" description="Defina as rotinas autorizadas para o cliente." defaultOpen>{tenantId && (canInstallConnector || isAnalyst) ? <ClientServicesCard key={tenantId} tenantId={tenantId} /> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente e confirme seu perfil de administrador para configurar os serviços contratados.</Card>}</TabDropdown></div>}
+    {effectiveTab === "connector" && <div role="tabpanel" className="max-w-5xl">
     <TabDropdown title="Cargas e jobs do Connector" description="Acompanhe, inicie ou retome a extração do cliente selecionado." defaultOpen>
       <ConnectorJobsCard tenantId={tenantId} companyId={companyId} />
     </TabDropdown>
@@ -95,7 +104,7 @@ export default function CommercialPortal() {
     </Card>
     </TabDropdown>
     </div>}
-    {activeTab === "adjustments" && <div role="tabpanel" className="max-w-5xl">
+    {effectiveTab === "adjustments" && <div role="tabpanel" className="max-w-5xl">
       {tenantId ? <AdjustmentSuggestionsCard tenantId={tenantId} companyId={companyId} tenantName={tenantName} cncCode={cncCode} /> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente antes de montar a sugestão de ajustes.</Card>}
     </div>}
   </>;

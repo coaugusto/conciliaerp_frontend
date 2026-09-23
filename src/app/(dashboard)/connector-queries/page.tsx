@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Card, ErrorState, PageHeader, PageLoader, StatusBadge } from "@/components/shared/ui";
 import { connectorQueriesService, jobScopeLabel, type ConnectorJob, type ConnectorMonitoring, type ConnectorQuery } from "@/services/connector-queries.service";
 import { getApiErrorMessage } from "@/services/api/client";
+import { useAuth } from "@/providers/providers";
 
 const displayName = (code: string) => code.replace(/_V\d+$/i, "");
 
@@ -14,8 +15,13 @@ const displayName = (code: string) => code.replace(/_V\d+$/i, "");
 // com o que é configuração pontual.
 type Tab = "operacao" | "catalogo" | "carga";
 export default function Page() {
+  const { user } = useAuth();
+  // Analista vê e ativa consultas (aba Catálogo), mas não opera cargas/jobs nem vê o texto do
+  // SELECT (know-how de extração) — mesmo escopo já aplicado no backend
+  // (connector-query.controller.ts: list() omite sqlPreview, setEnabled/activate-latest liberados).
+  const isAnalyst = user?.role === "ANALYST";
   const qc=useQueryClient(), [form,setForm]=useState<ConnectorQuery|null>(null), [sql,setSql]=useState<ConnectorQuery|null>(null);
-  const [tab,setTab]=useState<Tab>("operacao");
+  const [tab,setTab]=useState<Tab>(isAnalyst?"catalogo":"operacao");
   const queries=useQuery({queryKey:["connector-queries"],queryFn:connectorQueriesService.list});
   const monitor=useQuery({queryKey:["connector-monitoring"],queryFn:connectorQueriesService.monitoring,refetchInterval:15000});
   const refresh=()=>Promise.all([qc.invalidateQueries({queryKey:["connector-queries"]}),qc.invalidateQueries({queryKey:["connector-monitoring"]})]);
@@ -28,20 +34,23 @@ export default function Page() {
   const deletePrevious=useMutation({mutationFn:()=>connectorQueriesService.deletePreviousVersions(),onSuccess:(result)=>{refresh();alert(`${result.deleted} versão(ões) anterior(es) excluída(s).`)},onError:e=>alert(getApiErrorMessage(e))});
   if(queries.isLoading)return <Card className="p-8"><PageLoader/></Card>;
   if(queries.isError)return <ErrorState message={getApiErrorMessage(queries.error)}/>;
-  const tabs: Array<{ id: Tab; label: string }> = [{ id: "operacao", label: "Operação do dia a dia" }, { id: "catalogo", label: "Catálogo de consultas" }, { id: "carga", label: "Carga inicial" }];
+  const allTabs: Array<{ id: Tab; label: string }> = [{ id: "operacao", label: "Operação do dia a dia" }, { id: "catalogo", label: "Catálogo de consultas" }, { id: "carga", label: "Carga inicial" }];
+  const tabs = isAnalyst ? allTabs.filter(t=>t.id==="catalogo") : allTabs;
+  const effectiveTab = tabs.some(t=>t.id===tab) ? tab : tabs[0].id;
   return <><PageHeader title="Consultas do Connector" description="Extrações, agendamentos e situação dos envios."/>
-    <div className="mb-4 flex flex-wrap gap-2 border-b border-slate-200 pb-3">{tabs.map(t=><Button key={t.id} variant={tab===t.id?"primary":"ghost"} onClick={()=>setTab(t.id)}>{t.label}</Button>)}</div>
-    {tab==="operacao"&&<><Operations data={monitor.data} queries={queries.data??[]} configure={setForm} refresh={refresh}/>{monitor.isError&&<ErrorState message={getApiErrorMessage(monitor.error)}/>}</>}
-    {tab==="catalogo"&&<>
-      <div className="mb-3 flex flex-wrap gap-2">
+    <div className="mb-4 flex flex-wrap gap-2 border-b border-slate-200 pb-3">{tabs.map(t=><Button key={t.id} variant={effectiveTab===t.id?"primary":"ghost"} onClick={()=>setTab(t.id)}>{t.label}</Button>)}</div>
+    {effectiveTab==="operacao"&&<><Operations data={monitor.data} queries={queries.data??[]} configure={setForm} refresh={refresh}/>{monitor.isError&&<ErrorState message={getApiErrorMessage(monitor.error)}/>}</>}
+    {effectiveTab==="catalogo"&&<>
+      {!isAnalyst&&<div className="mb-3 flex flex-wrap gap-2">
         <Button disabled={publishCatalog.isPending} onClick={()=>{if(confirm("Publicar neste cliente as consultas da versão atual do catálogo? Consultas já publicadas não são alteradas; as novas entram desativadas."))publishCatalog.mutate()}}>{publishCatalog.isPending?"Publicando...":"Publicar catálogo de consultas"}</Button>
         <Button variant="secondary" disabled={activateLatest.isPending} onClick={()=>{if(confirm("Ativar todas as consultas na versão mais recente? Isso desativa qualquer versão anterior de cada código."))activateLatest.mutate()}}>{activateLatest.isPending?"Ativando...":"Ativar todas na versão mais recente"}</Button>
         <Button variant="danger" disabled={deletePrevious.isPending} onClick={()=>{if(confirm("Excluir todas as versões anteriores (não habilitadas) de cada consulta? Esta ação não pode ser desfeita."))deletePrevious.mutate()}}>{deletePrevious.isPending?"Excluindo...":"Excluir versões anteriores"}</Button>
-      </div>
-      <Card className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead><tr><th className="p-3 text-left">Consulta</th><th>Versão</th><th>Descrição</th><th>Envio</th><th/></tr></thead><tbody>{queries.data?.map(q=><tr className="border-t" key={q.id}><td className="p-3 font-mono text-xs">{displayName(q.code)}</td><td>v{q.version}</td><td>{q.description}</td><td><StatusBadge value={q.enabled?"ACTIVE":"INACTIVE"}/></td><td className="flex gap-1 py-2"><Button variant="ghost" onClick={()=>setSql(q)}>SELECT</Button><Button variant={q.enabled?"danger":"secondary"} onClick={()=>toggle.mutate({id:q.id,enabled:!q.enabled})}>{q.enabled?"Desativar":"Ativar"}</Button><Button variant="secondary" disabled={!q.enabled} onClick={()=>setForm(q)}>Configurar</Button>{!q.enabled&&<Button variant="danger" disabled={remove.isPending} onClick={()=>{if(confirm(`Apagar ${displayName(q.code)} v${q.version}? Esta ação não pode ser desfeita.`))remove.mutate(q.id)}}>Apagar</Button>}</td></tr>)}</tbody></table></Card>
+      </div>}
+      {isAnalyst&&<div className="mb-3"><Button variant="secondary" disabled={activateLatest.isPending} onClick={()=>{if(confirm("Ativar todas as consultas na versão mais recente? Isso desativa qualquer versão anterior de cada código."))activateLatest.mutate()}}>{activateLatest.isPending?"Ativando...":"Ativar todas na versão mais recente"}</Button></div>}
+      <Card className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead><tr><th className="p-3 text-left">Consulta</th><th>Versão</th><th>Descrição</th><th>Envio</th><th/></tr></thead><tbody>{queries.data?.map(q=><tr className="border-t" key={q.id}><td className="p-3 font-mono text-xs">{displayName(q.code)}</td><td>v{q.version}</td><td>{q.description}</td><td><StatusBadge value={q.enabled?"ACTIVE":"INACTIVE"}/></td><td className="flex gap-1 py-2">{!isAnalyst&&<Button variant="ghost" onClick={()=>setSql(q)}>SELECT</Button>}<Button variant={q.enabled?"danger":"secondary"} onClick={()=>toggle.mutate({id:q.id,enabled:!q.enabled})}>{q.enabled?"Desativar":"Ativar"}</Button>{!isAnalyst&&<Button variant="secondary" disabled={!q.enabled} onClick={()=>setForm(q)}>Configurar</Button>}{!isAnalyst&&!q.enabled&&<Button variant="danger" disabled={remove.isPending} onClick={()=>{if(confirm(`Apagar ${displayName(q.code)} v${q.version}? Esta ação não pode ser desfeita.`))remove.mutate(q.id)}}>Apagar</Button>}</td></tr>)}</tbody></table></Card>
       {sql&&<Card className="mt-4 p-4"><div className="flex justify-between"><b>{displayName(sql.code)} v{sql.version}</b><Button variant="ghost" onClick={()=>setSql(null)}>Fechar</Button></div><pre className="mt-3 max-h-[32rem] overflow-auto whitespace-pre rounded bg-slate-950 p-4 text-xs text-white">{sql.sqlPreview}</pre></Card>}
     </>}
-    {tab==="carga"&&<InitialLoad close={()=>{setTab("operacao");void refresh()}}/>}
+    {effectiveTab==="carga"&&<InitialLoad close={()=>{setTab("operacao");void refresh()}}/>}
     {form&&<ScheduleForm query={form} jobs={monitor.data?.jobs??[]} close={()=>{setForm(null);void refresh()}}/>}
   </>;
 }
