@@ -10,7 +10,10 @@ export const navigation = [
   { href: "/alerts", label: "Alertas", icon: Bell },
   { href: "/rules", label: "Regras", icon: ListChecks, admin: true },
   { href: "/connections", label: "Conexões ERP", icon: ShieldCheck, admin: true },
-  { href: "/connector-queries", label: "Consultas do agente conector", icon: Code2, admin: true },
+  // Não é admin-only: ANALYST sempre vê a aba "Catálogo" (capacidade base) e pode ganhar as demais
+  // por concessão pontual (ver AccessPermissionsService) — mas COMPANY_ADMIN nunca acessa nada aqui,
+  // é ferramenta interna da equipe ConciliaERP (know-how de extração do ERP do cliente).
+  { href: "/connector-queries", label: "Consultas do agente conector", icon: Code2, visibleTo: ["ADMIN", "ANALYST"] },
   { href: "/connector-data", label: "Cadastros importados", icon: Database },
   { href: "/catalog-review", label: "Revisão de cadastros", icon: ClipboardCheck, admin: true },
   { href: "/adherence-plan", label: "Plano de aderência", icon: ClipboardList, admin: true },

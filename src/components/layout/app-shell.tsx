@@ -51,7 +51,9 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
     if (!hydrated) return;
     if (!user) router.replace("/login");
     else if (user.mustChangePassword) router.replace("/change-password");
-    else if (user.role === "ANALYST" && ["/rules", "/data-sources", "/connections", "/connector-queries", "/documentation"].some((item) => path.startsWith(item))) router.replace("/dashboard");
+    // /connector-queries saiu daqui: ANALYST agora pode entrar (sempre vê a aba Catálogo, e as
+    // demais por concessão pontual — ver AccessPermissionsService); a página decide o que mostrar.
+    else if (user.role === "ANALYST" && ["/rules", "/data-sources", "/connections", "/documentation"].some((item) => path.startsWith(item))) router.replace("/dashboard");
   }, [hydrated, user, path, router]);
   useEffect(() => {
     const syncClientSelection = () => {
@@ -79,7 +81,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
   }, [clients.data, companyId]);
   if (!hydrated || !user) return null;
 
-  const visibleNavigation = navigation.filter((item) => !item.admin || user.role === "ADMIN");
+  const visibleNavigation = navigation.filter((item) => (item as { visibleTo?: string[] }).visibleTo ? (item as { visibleTo?: string[] }).visibleTo!.includes(user.role) : (!item.admin || user.role === "ADMIN"));
   const selectTenant = async (id: string) => { const response = await api.post<ApiResponse<{ accessToken: string; tenant: ClientTenant }>>("/auth/select-tenant", { tenantId: id }); const selected = response.data.data; localStorage.setItem("concilia_token", selected.accessToken); localStorage.setItem("concilia_tenant_id", selected.tenant.id); localStorage.setItem("concilia_tenant_name", selected.tenant.name); localStorage.setItem("concilia_cnc_code", selected.tenant.cncCode); localStorage.removeItem("concilia_company_id"); setTenantId(selected.tenant.id); setTenantSearch(`${selected.tenant.name} · ${selected.tenant.cncCode}`); window.location.reload(); };
   const selectTenantFromSearch = async (value: string) => {
     const normalized = value.trim().toLocaleLowerCase("pt-BR");
