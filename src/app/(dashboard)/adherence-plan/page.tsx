@@ -6,6 +6,7 @@ import { ChevronDown, ClipboardList, Download, Printer, Search, Send, Trash2 } f
 import { Button, Card, ErrorState, PageHeader, PageLoader, dateTime } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
 import { adherencePlanService, type AdherencePlanBankAccountGap, type AdherencePlanBudgetModel, type AdherencePlanCgoGap, type AdherencePlanCgoModel, type AdherencePlanItem, type AdherencePlanSection, type AdherencePlanSpeciesGap, type AdherencePlanSpeciesModel } from "@/services/adherence-plan.service";
+import { FiscalInconsistenciesCard } from "@/components/fiscal-inconsistencies-card";
 
 const POSITIVE = new Set(["OK", "SIM", "CONFIGURADO"]);
 const NEGATIVE = new Set(["PENDENTE", "NAO", "NÃO"]);
@@ -54,6 +55,7 @@ export default function AdherencePlanPage() {
     {result.isError && <ErrorState message={getApiErrorMessage(result.error)} />}
     {!result.isError && <>
       <RecipientsCard />
+      <FiscalInconsistenciesCard />
       <div className="mb-5 grid gap-3 sm:grid-cols-3 print:hidden">
         <Metric label="Processos verificados" value={sections.length} />
         <Metric label="Com pendência ou sem uso" value={gaps} tone="amber" />

@@ -10,6 +10,7 @@ import { useTabSearchParams } from "@/providers/tabs-provider";
 import { fiscalAlertsService, type FiscalAlertEntity, type FiscalAlertGroup, type FiscalAlertItem, type FiscalAlertSeverity, type FiscalSuggestionReference, type SpedAlertContext } from "@/services/fiscal-alerts.service";
 import { exportAlertsWorkbook } from "./export";
 import { readAlertsWorkbook } from "./import";
+import { FiscalInconsistenciesCard } from "@/components/fiscal-inconsistencies-card";
 
 const entityLabel:Record<FiscalAlertEntity,string>={PRODUCT:"Produtos",TAXATION:"Tributações",FAMILY:"Famílias",SUPPLIER:"Fornecedores",SPED:"SPED",DOCUMENT:"Notas fiscais"};
 const severityLabel:Record<FiscalAlertSeverity,string>={CRITICAL:"Crítica",HIGH:"Alta",MEDIUM:"Média",LOW:"Baixa"};
@@ -58,6 +59,7 @@ export default function FiscalAlertsPage(){
     {importWorkbook.isSuccess&&<div role="status" className="mb-5 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800"><CheckCircle2 size={17}/>{importWorkbook.data.updated} produto(s) corrigido(s).{importWorkbook.data.notFound.length>0&&` ${importWorkbook.data.notFound.length} código(s) não encontrado(s) no cadastro atual.`}{importWorkbook.data.skipped>0&&` ${importWorkbook.data.skipped} linha(s) sem alteração a aplicar.`}</div>}
     {validation.isSuccess&&<div role="status" className="mb-5 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-medium text-emerald-800"><CheckCircle2 size={17}/>Validação concluída. Os alertas persistidos foram atualizados.</div>}
     {validation.isError&&<div role="alert" className="mb-5"><ErrorState message={getApiErrorMessage(validation.error)}/></div>}
+    <FiscalInconsistenciesCard/>
     <div className="mb-5 flex max-w-5xl flex-wrap gap-2">{(["ALL","PRODUCT","TAXATION","DOCUMENT","SPED","FAMILY","SUPPLIER"] as const).map(value=><Button key={value} variant={entity===value?"primary":"secondary"} onClick={()=>{setEntity(value);setSelectedId(undefined);}}>{value==="ALL"?"Todas":entityLabel[value]}</Button>)}</div>
     {alerts.isLoading?<PageLoader/>:<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{visible.map(group=><AlertCard key={group.id} group={group} selected={selected?.id===group.id} select={()=>setSelectedId(group.id)}/>)}</div>}
     {selected&&<div ref={detailRef} className="scroll-mt-4"><Card className="mt-6 overflow-visible">
