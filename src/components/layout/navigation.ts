@@ -5,7 +5,9 @@ import { Bell, ClipboardCheck, ClipboardList, Code2, CreditCard, Database, Gauge
 export const navigation = [
   { href: "/dashboard", label: "Painel de conciliações", icon: Gauge },
   { href: "/commercial", label: "Portal do Cliente", icon: CreditCard },
-  { href: "/marketplace", label: "Catálogo mestre", icon: Store },
+  // Ferramenta interna de curadoria de cadastro entre clientes — o admin de UM cliente
+  // (COMPANY_ADMIN) não deve ver produtos/tributação de outros clientes aqui.
+  { href: "/marketplace", label: "Catálogo mestre", icon: Store, visibleTo: ["ADMIN", "ANALYST"] },
   { href: "/consinco", label: "Integração Consinco", icon: Workflow, admin: true },
   { href: "/alerts", label: "Alertas", icon: Bell },
   { href: "/rules", label: "Regras", icon: ListChecks, admin: true },
