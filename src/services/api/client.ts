@@ -1,6 +1,10 @@
 import axios from "axios";
 export type ApiResponse<T> = { success: boolean; data: T; message: string };
-export const api = axios.create({ baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api/v1", timeout: 12_000 });
+// 12s cancelava chamadas legítimas para tenants grandes (ex.: /alerts fiscal-summary passa disso
+// quando o cache de 4h expira e precisa recalcular — ver FISCAL_PRODUCTS_CACHE_TTL_MS) — o
+// cancelamento por si só já causa fila/nova tentativa disputando as poucas conexões simultâneas
+// que o navegador permite por domínio, o que piora ainda mais o carregamento da tela.
+export const api = axios.create({ baseURL: process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api/v1", timeout: 30_000 });
 export function getApiErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const message = error.response?.data?.error?.message ?? error.response?.data?.message;
