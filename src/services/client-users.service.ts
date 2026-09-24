@@ -10,6 +10,10 @@ export type ClientUser = {
   mustChangePassword: boolean;
   invitationStatus: "PENDING" | "ACCEPTED" | "EXPIRED";
   invitedAt: string | null;
+  // Só vem preenchido depois que o backend confirma que o SMTP aceitou o envio (EmailService.send
+  // sem erro) — distingue "convite existe" de "e-mail realmente saiu" (Hostinger às vezes recusa
+  // a autenticação numa conta que estava funcionando).
+  invitationEmailSentAt: string | null;
   lastLoginAt: string | null;
 };
 export type CreateClientUser = Pick<ClientUser, "name" | "email" | "role">;
