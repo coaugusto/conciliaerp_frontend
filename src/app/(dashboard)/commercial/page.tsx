@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, Copy, Download, KeyRound, Settings2, ShieldCheck } from "lucide-react";
+import { ChevronDown, Copy, Download, KeyRound, Settings2, ShieldCheck, Upload } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button, Card, ErrorState, PageHeader, PageLoader } from "@/components/shared/ui";
 import { commercialService, type ClientServiceCode, type ClientServiceFlag, type ConnectorIdentity } from "@/services/commercial.service";
 import { connectorDesktopService } from "@/services/connector-desktop.service";
-import { api, type ApiResponse } from "@/services/api/client";
+import { connectorPackageService } from "@/services/connector-package.service";
+import { api, getApiErrorMessage, type ApiResponse } from "@/services/api/client";
 import { useAuth } from "@/providers/providers";
 import { ClientUsersCard } from "@/components/commercial/client-users-card";
 import { AdjustmentSuggestionsCard } from "@/components/commercial/adjustment-suggestions-card";
@@ -99,6 +100,9 @@ export default function CommercialPortal() {
     </Card>
     </TabDropdown>
     }
+    {tenantId && <TabDropdown title="Pacote de dados do Connector" description="Arquivo .zip com os dados do Connector deste cliente, disponível para o administrador do cliente e o analista baixarem." defaultOpen>
+      <ConnectorPackageCard tenantId={tenantId} canUpload={user?.role === "ADMIN"} />
+    </TabDropdown>}
     <TabDropdown title="Ativação do Connector" description="Selecione o cliente e gere uma chave de ativação.">
     <Card className="max-w-3xl p-5">
       <div className="flex items-start gap-3"><KeyRound className="mt-0.5 text-blue-600" size={22} /><div><h2 className="font-bold text-slate-900">Chave de ativação do Connector</h2><p className="mt-1 text-sm text-slate-500">A chave completa fica disponível apenas nesta sessão e é consumida no primeiro registro bem-sucedido do agente.</p></div></div>
@@ -141,6 +145,33 @@ function ConnectorSeedCard({ tenantId, tenantName, tenantSlug }: { tenantId: str
       <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-md bg-white p-3 font-mono text-xs text-slate-700">{seedFragment}</pre>
       <Button variant="secondary" className="mt-3" onClick={copy}><Copy size={16} />{copied ? "Copiado" : "Copiar bloco"}</Button>
     </div>}
+  </Card>;
+}
+
+// Só o mais recente por cliente: um novo upload substitui o anterior (ver TenantConnectorPackage
+// no backend). Ver/baixar é para ADMIN, COMPANY_ADMIN e ANALYST-com-concessão (o gate de quem
+// chega até aqui já filtrou isso — ver effectiveTab==="connector" acima); só o upload é ADMIN-only.
+function ConnectorPackageCard({ tenantId, canUpload }: { tenantId: string; canUpload: boolean }) {
+  const info = useQuery({ queryKey: ["connector-package", tenantId], queryFn: connectorPackageService.info });
+  const [file, setFile] = useState<File | null>(null);
+  const upload = useMutation({ mutationFn: () => connectorPackageService.upload(file!), onSuccess: () => { setFile(null); void info.refetch(); } });
+  const data = info.data;
+  const download = useMutation({ mutationFn: () => connectorPackageService.download(data?.available ? data.fileName : "dados-connector.zip") });
+  const formatSize = (bytes: number) => bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (info.isLoading) return <PageLoader label="Consultando pacote..." />;
+  return <Card className="max-w-3xl p-5">
+    {data?.available
+      ? <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div><p className="text-sm font-semibold text-slate-900">{data.fileName}</p><p className="mt-0.5 text-xs text-slate-500">{formatSize(data.sizeBytes)} · Enviado em {new Date(data.uploadedAt).toLocaleString("pt-BR")}</p></div>
+          <Button variant="secondary" onClick={() => download.mutate()} disabled={download.isPending}><Download size={16} />{download.isPending ? "Baixando..." : "Baixar"}</Button>
+        </div>
+      : <p className="text-sm text-slate-500">Nenhum pacote enviado ainda para este cliente.</p>}
+    {download.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(download.error)} /></div>}
+    {canUpload && <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4">
+      <input type="file" accept=".zip" onChange={(event) => setFile(event.target.files?.[0] ?? null)} className="text-sm text-slate-700" />
+      <Button onClick={() => upload.mutate()} disabled={!file || upload.isPending}><Upload size={16} />{upload.isPending ? "Enviando..." : "Enviar novo pacote"}</Button>
+    </div>}
+    {upload.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(upload.error)} /></div>}
   </Card>;
 }
 
