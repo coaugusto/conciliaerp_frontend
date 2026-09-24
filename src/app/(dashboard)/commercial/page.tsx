@@ -100,7 +100,7 @@ export default function CommercialPortal() {
     </Card>
     </TabDropdown>
     }
-    {tenantId && <TabDropdown title="Pacote de dados do Connector" description="Arquivo .zip com os dados do Connector deste cliente, disponível para o administrador do cliente e o analista baixarem." defaultOpen>
+    {tenantId && <TabDropdown title="Pacote de dados do Connector" description="Arquivo .zip, .rar ou .7z com os dados do Connector deste cliente, disponível para o administrador do cliente e o analista baixarem." defaultOpen>
       <ConnectorPackageCard tenantId={tenantId} canUpload={user?.role === "ADMIN"} />
     </TabDropdown>}
     <TabDropdown title="Ativação do Connector" description="Selecione o cliente e gere uma chave de ativação.">
@@ -168,7 +168,7 @@ function ConnectorPackageCard({ tenantId, canUpload }: { tenantId: string; canUp
       : <p className="text-sm text-slate-500">Nenhum pacote enviado ainda para este cliente.</p>}
     {download.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(download.error)} /></div>}
     {canUpload && <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-slate-200 pt-4">
-      <input type="file" accept=".zip" onChange={(event) => setFile(event.target.files?.[0] ?? null)} className="text-sm text-slate-700" />
+      <input type="file" accept=".zip,.rar,.7z" onChange={(event) => setFile(event.target.files?.[0] ?? null)} className="text-sm text-slate-700" />
       <Button onClick={() => upload.mutate()} disabled={!file || upload.isPending}><Upload size={16} />{upload.isPending ? "Enviando..." : "Enviar novo pacote"}</Button>
     </div>}
     {upload.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(upload.error)} /></div>}
