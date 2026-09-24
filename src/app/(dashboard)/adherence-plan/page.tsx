@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ClipboardList, Printer, Search } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, ClipboardList, Download, Printer, Search, Send, Trash2 } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader, PageLoader, dateTime } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
 import { adherencePlanService, type AdherencePlanBankAccountGap, type AdherencePlanBudgetModel, type AdherencePlanCgoGap, type AdherencePlanCgoModel, type AdherencePlanItem, type AdherencePlanSection, type AdherencePlanSpeciesGap, type AdherencePlanSpeciesModel } from "@/services/adherence-plan.service";
@@ -53,6 +53,7 @@ export default function AdherencePlanPage() {
     <PageHeader title="Plano de Aderência" description="Processos do ERP configurados na base do cliente — use antes do go-live e em reuniões de status." action={hasPrintableGaps ? <Button variant="secondary" onClick={() => window.print()} className="print:hidden"><Printer size={16} />Imprimir lacunas</Button> : undefined} />
     {result.isError && <ErrorState message={getApiErrorMessage(result.error)} />}
     {!result.isError && <>
+      <RecipientsCard />
       <div className="mb-5 grid gap-3 sm:grid-cols-3 print:hidden">
         <Metric label="Processos verificados" value={sections.length} />
         <Metric label="Com pendência ou sem uso" value={gaps} tone="amber" />
@@ -97,6 +98,43 @@ function Metric({ label, value, tone = "slate" }: { label: string; value: number
 
 function EmptyPlan() {
   return <Card className="p-10 text-center"><ClipboardList size={28} className="mx-auto text-slate-400" /><p className="mt-3 font-semibold text-slate-800">Nenhuma sincronização de aderência ainda</p><p className="mt-1 text-sm text-slate-500">Execute a consulta ADHERENCE_PLAN_V1 em /connector-queries para este cliente.</p></Card>;
+}
+
+// Fase 1 do relatório periódico: cadastro de destinatários (um grupo só por tenant — o Plano de
+// Aderência é um checklist vivo, não um documento por versão), PDF com o detalhe completo e envio
+// manual de teste. Agendamento recorrente (diário/semanal/mensal) fica para depois, em cima disto.
+function RecipientsCard() {
+  const qc = useQueryClient();
+  const recipients = useQuery({ queryKey: ["adherence-plan-recipients"], queryFn: adherencePlanService.listRecipients });
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["adherence-plan-recipients"] });
+  const add = useMutation({ mutationFn: () => adherencePlanService.addRecipient(email.trim(), name.trim() || undefined), onSuccess: () => { setEmail(""); setName(""); invalidate(); } });
+  const remove = useMutation({ mutationFn: (id: string) => adherencePlanService.removeRecipient(id), onSuccess: invalidate });
+  const download = useMutation({ mutationFn: () => adherencePlanService.downloadPdf() });
+  const send = useMutation({ mutationFn: () => adherencePlanService.sendNow() });
+  return <Card className="mb-5 p-4 print:hidden">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div><h3 className="font-bold text-slate-900">Relatório por e-mail</h3><p className="mt-0.5 text-sm max-w-xl text-slate-500">Cadastre quem recebe o Plano de Aderência — cards com os tópicos no corpo do e-mail, detalhes completos no PDF anexado.</p></div>
+      <div className="flex shrink-0 flex-wrap gap-2">
+        <Button variant="secondary" onClick={() => download.mutate()} disabled={download.isPending}><Download size={16} />{download.isPending ? "Gerando..." : "Baixar PDF"}</Button>
+        <Button onClick={() => send.mutate()} disabled={send.isPending || !recipients.data?.length}><Send size={16} />{send.isPending ? "Enviando..." : "Enviar agora"}</Button>
+      </div>
+    </div>
+    {send.isSuccess && <p className="mt-3 rounded bg-emerald-50 p-2 text-sm text-emerald-800">Relatório enviado para {send.data.sent} destinatário(s).</p>}
+    {send.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(send.error)} /></div>}
+    {download.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(download.error)} /></div>}
+    <div className="mt-4 flex flex-wrap items-end gap-3">
+      <label className="text-sm font-semibold text-slate-700">E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1.5 h-10 w-64 rounded border border-slate-300 px-3 text-sm font-normal" placeholder="nome@cliente.com.br" /></label>
+      <label className="text-sm font-semibold text-slate-700">Nome (opcional)<input value={name} onChange={(event) => setName(event.target.value)} className="mt-1.5 h-10 w-48 rounded border border-slate-300 px-3 text-sm font-normal" /></label>
+      <Button variant="secondary" onClick={() => add.mutate()} disabled={!email.trim() || add.isPending}>{add.isPending ? "Adicionando..." : "Adicionar"}</Button>
+    </div>
+    {add.isError && <div className="mt-2"><ErrorState message={getApiErrorMessage(add.error)} /></div>}
+    <ul className="mt-3 divide-y divide-slate-100">
+      {recipients.data?.map((recipient) => <li key={recipient.id} className="flex items-center justify-between gap-3 py-2 text-sm"><span>{recipient.email}{recipient.name ? ` — ${recipient.name}` : ""}</span><Button variant="ghost" onClick={() => remove.mutate(recipient.id)} disabled={remove.isPending}><Trash2 size={14} /></Button></li>)}
+      {!recipients.data?.length && <p className="py-2 text-sm text-slate-500">Nenhum destinatário cadastrado ainda.</p>}
+    </ul>
+  </Card>;
 }
 
 /** Lista expansível com o total sempre visível (mesmo fechada) — cada uma das 4 consultas de
