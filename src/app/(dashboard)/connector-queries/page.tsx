@@ -5,6 +5,7 @@ import { Button, Card, ErrorState, PageHeader, PageLoader, StatusBadge } from "@
 import { connectorQueriesService, jobScopeLabel, type ConnectorJob, type ConnectorMonitoring, type ConnectorQuery } from "@/services/connector-queries.service";
 import { getApiErrorMessage } from "@/services/api/client";
 import { useAuth } from "@/providers/providers";
+import { useMyAccessPermissions } from "@/hooks/use-my-access-permissions";
 
 const displayName = (code: string) => code.replace(/_V\d+$/i, "");
 
@@ -20,6 +21,14 @@ export default function Page() {
   // SELECT (know-how de extração) — mesmo escopo já aplicado no backend
   // (connector-query.controller.ts: list() omite sqlPreview, setEnabled/activate-latest liberados).
   const isAnalyst = user?.role === "ANALYST";
+  // Concessão pontual (ver /commercial → Usuários do cliente → "Permissões especiais") libera o
+  // que normalmente fica restrito ao papel ANALYST aqui — mesma ideia do commercial/page.tsx.
+  const myPermissions = useMyAccessPermissions();
+  const canSeeOperation = !isAnalyst || myPermissions.has("CONNECTOR_QUERIES_OPERATION_TAB");
+  const canSeeInitialLoad = !isAnalyst || myPermissions.has("CONNECTOR_QUERIES_INITIAL_LOAD_TAB");
+  const canViewSql = !isAnalyst || myPermissions.has("CONNECTOR_QUERIES_VIEW_SQL");
+  const canPublishCatalog = !isAnalyst || myPermissions.has("CONNECTOR_QUERIES_PUBLISH_CATALOG");
+  const canDeleteVersions = !isAnalyst || myPermissions.has("CONNECTOR_QUERIES_DELETE_VERSIONS");
   const qc=useQueryClient(), [form,setForm]=useState<ConnectorQuery|null>(null), [sql,setSql]=useState<ConnectorQuery|null>(null);
   const [tab,setTab]=useState<Tab>(isAnalyst?"catalogo":"operacao");
   const queries=useQuery({queryKey:["connector-queries"],queryFn:connectorQueriesService.list});
@@ -35,19 +44,18 @@ export default function Page() {
   if(queries.isLoading)return <Card className="p-8"><PageLoader/></Card>;
   if(queries.isError)return <ErrorState message={getApiErrorMessage(queries.error)}/>;
   const allTabs: Array<{ id: Tab; label: string }> = [{ id: "operacao", label: "Operação do dia a dia" }, { id: "catalogo", label: "Catálogo de consultas" }, { id: "carga", label: "Carga inicial" }];
-  const tabs = isAnalyst ? allTabs.filter(t=>t.id==="catalogo") : allTabs;
+  const tabs = allTabs.filter(t => t.id === "catalogo" || (t.id === "operacao" && canSeeOperation) || (t.id === "carga" && canSeeInitialLoad));
   const effectiveTab = tabs.some(t=>t.id===tab) ? tab : tabs[0].id;
   return <><PageHeader title="Consultas do Connector" description="Extrações, agendamentos e situação dos envios."/>
     <div className="mb-4 flex flex-wrap gap-2 border-b border-slate-200 pb-3">{tabs.map(t=><Button key={t.id} variant={effectiveTab===t.id?"primary":"ghost"} onClick={()=>setTab(t.id)}>{t.label}</Button>)}</div>
     {effectiveTab==="operacao"&&<><Operations data={monitor.data} queries={queries.data??[]} configure={setForm} refresh={refresh}/>{monitor.isError&&<ErrorState message={getApiErrorMessage(monitor.error)}/>}</>}
     {effectiveTab==="catalogo"&&<>
-      {!isAnalyst&&<div className="mb-3 flex flex-wrap gap-2">
-        <Button disabled={publishCatalog.isPending} onClick={()=>{if(confirm("Publicar neste cliente as consultas da versão atual do catálogo? Consultas já publicadas não são alteradas; as novas entram desativadas."))publishCatalog.mutate()}}>{publishCatalog.isPending?"Publicando...":"Publicar catálogo de consultas"}</Button>
+      <div className="mb-3 flex flex-wrap gap-2">
+        {canPublishCatalog&&<Button disabled={publishCatalog.isPending} onClick={()=>{if(confirm("Publicar neste cliente as consultas da versão atual do catálogo? Consultas já publicadas não são alteradas; as novas entram desativadas."))publishCatalog.mutate()}}>{publishCatalog.isPending?"Publicando...":"Publicar catálogo de consultas"}</Button>}
         <Button variant="secondary" disabled={activateLatest.isPending} onClick={()=>{if(confirm("Ativar todas as consultas na versão mais recente? Isso desativa qualquer versão anterior de cada código."))activateLatest.mutate()}}>{activateLatest.isPending?"Ativando...":"Ativar todas na versão mais recente"}</Button>
-        <Button variant="danger" disabled={deletePrevious.isPending} onClick={()=>{if(confirm("Excluir todas as versões anteriores (não habilitadas) de cada consulta? Esta ação não pode ser desfeita."))deletePrevious.mutate()}}>{deletePrevious.isPending?"Excluindo...":"Excluir versões anteriores"}</Button>
-      </div>}
-      {isAnalyst&&<div className="mb-3"><Button variant="secondary" disabled={activateLatest.isPending} onClick={()=>{if(confirm("Ativar todas as consultas na versão mais recente? Isso desativa qualquer versão anterior de cada código."))activateLatest.mutate()}}>{activateLatest.isPending?"Ativando...":"Ativar todas na versão mais recente"}</Button></div>}
-      <Card className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead><tr><th className="p-3 text-left">Consulta</th><th>Versão</th><th>Descrição</th><th>Envio</th><th/></tr></thead><tbody>{queries.data?.map(q=><tr className="border-t" key={q.id}><td className="p-3 font-mono text-xs">{displayName(q.code)}</td><td>v{q.version}</td><td>{q.description}</td><td><StatusBadge value={q.enabled?"ACTIVE":"INACTIVE"}/></td><td className="flex gap-1 py-2">{!isAnalyst&&<Button variant="ghost" onClick={()=>setSql(q)}>SELECT</Button>}<Button variant={q.enabled?"danger":"secondary"} onClick={()=>toggle.mutate({id:q.id,enabled:!q.enabled})}>{q.enabled?"Desativar":"Ativar"}</Button>{!isAnalyst&&<Button variant="secondary" disabled={!q.enabled} onClick={()=>setForm(q)}>Configurar</Button>}{!isAnalyst&&!q.enabled&&<Button variant="danger" disabled={remove.isPending} onClick={()=>{if(confirm(`Apagar ${displayName(q.code)} v${q.version}? Esta ação não pode ser desfeita.`))remove.mutate(q.id)}}>Apagar</Button>}</td></tr>)}</tbody></table></Card>
+        {canDeleteVersions&&<Button variant="danger" disabled={deletePrevious.isPending} onClick={()=>{if(confirm("Excluir todas as versões anteriores (não habilitadas) de cada consulta? Esta ação não pode ser desfeita."))deletePrevious.mutate()}}>{deletePrevious.isPending?"Excluindo...":"Excluir versões anteriores"}</Button>}
+      </div>
+      <Card className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead><tr><th className="p-3 text-left">Consulta</th><th>Versão</th><th>Descrição</th><th>Envio</th><th/></tr></thead><tbody>{queries.data?.map(q=><tr className="border-t" key={q.id}><td className="p-3 font-mono text-xs">{displayName(q.code)}</td><td>v{q.version}</td><td>{q.description}</td><td><StatusBadge value={q.enabled?"ACTIVE":"INACTIVE"}/></td><td className="flex gap-1 py-2">{canViewSql&&<Button variant="ghost" onClick={()=>setSql(q)}>SELECT</Button>}<Button variant={q.enabled?"danger":"secondary"} onClick={()=>toggle.mutate({id:q.id,enabled:!q.enabled})}>{q.enabled?"Desativar":"Ativar"}</Button>{canSeeOperation&&<Button variant="secondary" disabled={!q.enabled} onClick={()=>setForm(q)}>Configurar</Button>}{!isAnalyst&&!q.enabled&&<Button variant="danger" disabled={remove.isPending} onClick={()=>{if(confirm(`Apagar ${displayName(q.code)} v${q.version}? Esta ação não pode ser desfeita.`))remove.mutate(q.id)}}>Apagar</Button>}</td></tr>)}</tbody></table></Card>
       {sql&&<Card className="mt-4 p-4"><div className="flex justify-between"><b>{displayName(sql.code)} v{sql.version}</b><Button variant="ghost" onClick={()=>setSql(null)}>Fechar</Button></div><pre className="mt-3 max-h-[32rem] overflow-auto whitespace-pre rounded bg-slate-950 p-4 text-xs text-white">{sql.sqlPreview}</pre></Card>}
     </>}
     {effectiveTab==="carga"&&<InitialLoad close={()=>{setTab("operacao");void refresh()}}/>}
