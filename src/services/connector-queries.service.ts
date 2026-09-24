@@ -4,7 +4,6 @@ import type { ConnectorAgent } from "./connector-agent";
 export type ConnectorQueryParameter = { name: string; type: string; required: boolean; default?: unknown };
 export type ConnectorQuery = { id: string; code: string; version: number; description: string; sqlPreview: string; sha256: string; parameters: ConnectorQueryParameter[]; timeoutSeconds: number; maxRows: number; batchSize: number; enabled: boolean; syncWithConnector: boolean };
 export type ConnectorQueryCoverage={ready:boolean;operationLevelValidationReady:boolean;coveragePercent:number;queries:Array<{code:string;purpose:string;exists:boolean;version?:number;enabled:boolean;approvedForConnector:boolean;missingRequired:string[];missingRecommended:string[];ready:boolean}>};
-export type ConnectorInitialLoad = { id: string; status: string; scheduledJobs: number };
 export type ConnectorJob = { id: string; connectorId: string; companyId?: string | null; queryCode: string; queryVersion: number; status: string; parameters?: Record<string, unknown> | null; requestedAt: string; dispatchedAt?: string | null; completedAt?: string | null; expiresAt: string; errorCode?: string | null; errorMessage?: string | null; recordCount: number };
 export type ConnectorCapability = { connectorId: string; queryCode: string; queryVersion: number; sha256: string; enabled: boolean; reportedAt: string };
 export type ConnectorSchedule = { id: string; connectorId: string; companyId: string; queryCode: string; queryVersion: number; frequency: "DAILY" | "HOURLY" | "MINUTES"; intervalMinutes?: number | null; nextRunAt: string; lastRunAt?: string | null; active: boolean };
@@ -43,6 +42,5 @@ export const connectorQueriesService = {
   schedule: async (id: string, connectorId: string, companyId: string, parameters: Record<string, unknown> = {}) => (await api.post<ApiResponse<unknown>>(`/connector-queries/${id}/jobs`, { connectorId, companyId, parameters })).data.data,
   createRecurringSchedule: async (id: string, data: { connectorId: string; companyId: string; startAt: string; frequency: "DAILY" | "HOURLY" | "MINUTES"; intervalMinutes?: number; parameters?: Record<string, unknown> }) => (await api.post<ApiResponse<ConnectorSchedule>>(`/connector-queries/${id}/schedules`, { ...data, parameters: data.parameters ?? {} })).data.data,
   setScheduleActive: async (id: string, active: boolean) => (await api.patch<ApiResponse<ConnectorSchedule>>(`/connector-queries/schedules/${id}/active`, { active })).data.data,
-  startInitialLoad: async (connectorId: string, companyId: string) => (await api.post<ApiResponse<ConnectorInitialLoad> | ConnectorInitialLoad>("/connector-initial-loads", { connectorId, companyId })).data,
   cancelJob: async (jobId: string) => (await api.post<ApiResponse<ConnectorJob>>(`/connector-queries/jobs/${jobId}/cancel`)).data.data,
 };

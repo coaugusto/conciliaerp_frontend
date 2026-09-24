@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Card, ErrorState, PageHeader, PageLoader, StatusBadge } from "@/components/shared/ui";
 import { connectorQueriesService, jobScopeLabel, type ConnectorJob, type ConnectorMonitoring, type ConnectorQuery } from "@/services/connector-queries.service";
+import { connectorInitialLoadsService } from "@/services/connector-initial-loads.service";
 import { getApiErrorMessage } from "@/services/api/client";
 import { useAuth } from "@/providers/providers";
 import { useMyAccessPermissions } from "@/hooks/use-my-access-permissions";
@@ -58,7 +59,7 @@ export default function Page() {
       <Card className="overflow-x-auto"><table className="w-full min-w-[760px] text-sm"><thead><tr><th className="p-3 text-left">Consulta</th><th>Versão</th><th>Descrição</th><th>Envio</th><th/></tr></thead><tbody>{queries.data?.map(q=><tr className="border-t" key={q.id}><td className="p-3 font-mono text-xs">{displayName(q.code)}</td><td>v{q.version}</td><td>{q.description}</td><td><StatusBadge value={q.enabled?"ACTIVE":"INACTIVE"}/></td><td className="flex gap-1 py-2">{canViewSql&&<Button variant="ghost" onClick={()=>setSql(q)}>SELECT</Button>}<Button variant={q.enabled?"danger":"secondary"} onClick={()=>toggle.mutate({id:q.id,enabled:!q.enabled})}>{q.enabled?"Desativar":"Ativar"}</Button>{canSeeOperation&&<Button variant="secondary" disabled={!q.enabled} onClick={()=>setForm(q)}>Configurar</Button>}{!isAnalyst&&!q.enabled&&<Button variant="danger" disabled={remove.isPending} onClick={()=>{if(confirm(`Apagar ${displayName(q.code)} v${q.version}? Esta ação não pode ser desfeita.`))remove.mutate(q.id)}}>Apagar</Button>}</td></tr>)}</tbody></table></Card>
       {sql&&<Card className="mt-4 p-4"><div className="flex justify-between"><b>{displayName(sql.code)} v{sql.version}</b><Button variant="ghost" onClick={()=>setSql(null)}>Fechar</Button></div><pre className="mt-3 max-h-[32rem] overflow-auto whitespace-pre rounded bg-slate-950 p-4 text-xs text-white">{sql.sqlPreview}</pre></Card>}
     </>}
-    {effectiveTab==="carga"&&<InitialLoad close={()=>{setTab("operacao");void refresh()}}/>}
+    {effectiveTab==="carga"&&<InitialLoadPanel/>}
     {form&&<ScheduleForm query={form} jobs={monitor.data?.jobs??[]} close={()=>{setForm(null);void refresh()}}/>}
   </>;
 }
@@ -84,7 +85,78 @@ function Info({title,value,detail}:{title:string;value:string;detail:string}){re
 
 function Targets({value,set}:{value:string;set:(v:string)=>void}){const q=useQuery({queryKey:["connector-targets"],queryFn:connectorQueriesService.listConnectors});useEffect(()=>{if(!value&&q.data?.length===1)set(q.data[0].connectorId)},[value,q.data,set]);return <select className="rounded border p-2" value={value} onChange={e=>set(e.target.value)}><option value="">Selecione o Connector</option>{q.data?.map(x=><option key={x.connectorId} value={x.connectorId}>{x.machineName||"Connector"} — {x.connectorId}</option>)}</select>}
 
-function InitialLoad({close}:{close:()=>void}){const [connectorId,setConnectorId]=useState("");const companyId=typeof window==="undefined"?"":localStorage.getItem("concilia_company_id")??"";const run=useMutation({mutationFn:()=>connectorQueriesService.startInitialLoad(connectorId,companyId),onSuccess:close});return <Card className="mt-4 grid gap-3 border-cyan-200 p-4"><b>Carga inicial completa</b><Targets value={connectorId} set={setConnectorId}/>{run.isError&&<ErrorState message={getApiErrorMessage(run.error)}/>}<div><Button disabled={!connectorId||!companyId||run.isPending} onClick={()=>run.mutate()}>Iniciar carga</Button><Button className="ml-2" variant="secondary" onClick={close}>Cancelar</Button></div></Card>}
+// Único lugar pra iniciar/acompanhar cargas: antes existia uma versão simplificada aqui (só
+// "escolha o Connector e clique Iniciar", sem status nem histórico) e uma versão completa
+// duplicada em /commercial → Connector ("Cargas e jobs do Connector") — a mesma chamada de API
+// em dois lugares diferentes da tela. Ficou só esta, mais completa.
+const STATUS_CARDS: Array<{ key: "PENDING"|"RUNNING"|"COMPLETED"|"FAILED"; label: string }> = [
+  { key: "PENDING", label: "Pendentes" }, { key: "RUNNING", label: "Executando" },
+  { key: "COMPLETED", label: "Concluídos" }, { key: "FAILED", label: "Falhos" },
+];
+function InitialLoadPanel(){
+  const companyId=typeof window==="undefined"?"":localStorage.getItem("concilia_company_id")??"";
+  const tenantId=typeof window==="undefined"?"":localStorage.getItem("concilia_tenant_id")??"";
+  const [statusFilter,setStatusFilter]=useState<"PENDING"|"RUNNING"|"COMPLETED"|"FAILED"|undefined>(undefined);
+  const panel=useQuery({queryKey:["connector-initial-loads",tenantId,companyId,statusFilter],queryFn:()=>connectorInitialLoadsService.list({companyId:companyId||undefined,status:statusFilter}),refetchInterval:query=>(query.state.data?.summary.pending??0)>0?3000:10000,refetchIntervalInBackground:true});
+  const [connectorId,setConnectorId]=useState("");
+  const [selectedCompanyId,setSelectedCompanyId]=useState(companyId);
+  const refresh=()=>panel.refetch();
+  const start=useMutation({mutationFn:()=>connectorInitialLoadsService.start(connectorId,selectedCompanyId),onSuccess:refresh});
+  const bootstrap=useMutation({mutationFn:()=>connectorInitialLoadsService.bootstrap(connectorId),onSuccess:()=>{void refresh()}});
+  const resume=useMutation({mutationFn:(loadId:string)=>connectorInitialLoadsService.resume(loadId),onSuccess:refresh});
+  const retry=useMutation({mutationFn:(jobId:string)=>connectorInitialLoadsService.retryJob(jobId),onSuccess:refresh});
+  const approve=useMutation({mutationFn:(loadId:string)=>connectorInitialLoadsService.approve(loadId),onSuccess:refresh});
+  const reject=useMutation({mutationFn:({loadId,reason}:{loadId:string;reason?:string})=>connectorInitialLoadsService.reject(loadId,reason),onSuccess:refresh});
+  const [resetOpen,setResetOpen]=useState(false);
+  const [resetPassword,setResetPassword]=useState("");
+  const [resetReason,setResetReason]=useState("");
+  const reset=useMutation({mutationFn:(loadId:string)=>connectorInitialLoadsService.reset(loadId,resetPassword,resetReason.trim()||undefined),onSuccess:()=>{setResetPassword("");setResetOpen(false);refresh()}});
+  if(panel.isLoading)return <Card className="p-8"><PageLoader/></Card>;
+  if(panel.isError)return <ErrorState message={getApiErrorMessage(panel.error)}/>;
+  if(!panel.data)return <ErrorState message="A API respondeu sem os dados de cargas do Connector."/>;
+  const data=panel.data;
+  const effectiveCompanyId=selectedCompanyId||data.selectedCompanyId||"";
+  const activeLoad=data.loads[0];
+  return <>
+    <div className="mb-3 flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-semibold">Execução da carga inicial</h2><p className="text-sm text-slate-600">Os jobs ficam na API até o Connector solicitar a próxima execução.</p></div><Button variant="secondary" onClick={refresh} disabled={panel.isFetching}>{panel.isFetching?"Atualizando...":"Atualizar"}</Button></div>
+    <div className="mb-4 grid gap-3 sm:grid-cols-5">
+      {STATUS_CARDS.map(({key,label})=><button key={key} type="button" onClick={()=>setStatusFilter(current=>current===key?undefined:key)} className={`rounded border p-3 text-left transition ${statusFilter===key?"border-cyan-600 bg-cyan-50":"border-slate-200 bg-slate-50 hover:bg-slate-100"}`}><span className="text-xs uppercase text-slate-500">{label}</span><strong className="mt-1 block text-xl text-slate-900">{data.summary[key.toLowerCase() as "pending"|"running"|"completed"|"failed"]}</strong></button>)}
+      <div className="rounded border border-slate-200 bg-slate-50 p-3"><span className="text-xs uppercase text-slate-500">Total</span><strong className="mt-1 block text-xl text-slate-900">{data.summary.total}</strong></div>
+    </div>
+    <Card className="mb-4 border-cyan-200 p-4">
+      <div className="grid gap-3 md:grid-cols-2">
+        <label className="text-sm font-semibold text-slate-700">Connector<select className="mt-1.5 h-10 w-full rounded border p-2 font-mono text-sm font-normal" value={connectorId} onChange={e=>setConnectorId(e.target.value)}><option value="">Selecione o Connector</option>{data.connectors.map(c=><option key={c.connectorId} value={c.connectorId}>{c.machineName||"Connector"} — {c.connectorId}{c.environment?` (${c.environment})`:""}</option>)}</select></label>
+        {data.companies.length>0&&<label className="text-sm font-semibold text-slate-700">Empresa extraída<select className="mt-1.5 h-10 w-full rounded border p-2 text-sm font-normal" value={effectiveCompanyId} onChange={e=>setSelectedCompanyId(e.target.value)}><option value="">Selecione a empresa</option>{data.companies.map(c=><option key={c.id} value={c.id}>{c.tradeName||c.legalName} — {c.document}</option>)}</select></label>}
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button variant={data.companies.length===0?"primary":"secondary"} onClick={()=>bootstrap.mutate()} disabled={!connectorId||bootstrap.isPending}>{bootstrap.isPending?"Solicitando ao Connector...":data.companies.length===0?"Atualizar / tentar novamente":"Atualizar empresas do Consinco"}</Button>
+        {data.companies.length>0&&<Button onClick={()=>start.mutate()} disabled={!connectorId||!effectiveCompanyId||start.isPending}>{start.isPending?"Iniciando...":"Iniciar carga"}</Button>}
+        {activeLoad&&!["APPROVED","PENDING_VALIDATION"].includes(activeLoad.status)&&<Button variant="secondary" onClick={()=>resume.mutate(activeLoad.id)} disabled={resume.isPending}>{resume.isPending?"Retomando...":"Retomar carga"}</Button>}
+        {activeLoad&&activeLoad.status==="PENDING_VALIDATION"&&<><Button onClick={()=>approve.mutate(activeLoad.id)} disabled={approve.isPending}>{approve.isPending?"Aprovando...":"Aprovar carga"}</Button><Button variant="secondary" onClick={()=>{const reason=window.prompt("Motivo da rejeição (opcional, mas recomendado):");if(reason===null)return;reject.mutate({loadId:activeLoad.id,reason:reason.trim()||undefined})}} disabled={reject.isPending}>{reject.isPending?"Rejeitando...":"Rejeitar carga"}</Button></>}
+        {activeLoad&&<Button variant="danger" onClick={()=>setResetOpen(o=>!o)}>Zerar carga</Button>}
+      </div>
+      {activeLoad&&activeLoad.status==="PENDING_VALIDATION"&&<p className="mt-3 rounded bg-cyan-50 p-3 text-sm text-cyan-800">Todos os jobs desta carga terminaram e aguardam validação. Aprove (ou rejeite) para liberar uma nova execução — inclusive se novas consultas foram adicionadas depois desta carga, elas só entram após aprovar e clicar em &ldquo;Iniciar carga&rdquo; de novo.</p>}
+      {resetOpen&&activeLoad&&<div className="mt-3 rounded border border-red-200 bg-red-50 p-4">
+        <p className="text-sm font-semibold text-red-800">Zerar a carga inicial de {data.companies.find(c=>c.id===activeLoad.companyId)?.tradeName||"empresa selecionada"}</p>
+        <p className="mt-1 text-sm text-red-700">Isso apaga os registros importados, lotes e jobs desta carga e volta o status para NÃO INICIADA. Use quando os dados foram transmitidos por uma versão anterior e precisam ser recarregados do zero. Não afeta outras cargas nem outros clientes.</p>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <label className="text-sm font-semibold text-red-800">Sua senha de login<input type="password" value={resetPassword} onChange={e=>setResetPassword(e.target.value)} className="mt-1.5 h-10 w-full rounded border border-red-300 bg-white px-3 text-sm font-normal" autoComplete="current-password"/></label>
+          <label className="text-sm font-semibold text-red-800">Motivo (opcional)<input value={resetReason} onChange={e=>setResetReason(e.target.value)} className="mt-1.5 h-10 w-full rounded border border-red-300 bg-white px-3 text-sm font-normal" placeholder="Ex.: carga transmitida em versão anterior"/></label>
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Button variant="danger" onClick={()=>reset.mutate(activeLoad.id)} disabled={!resetPassword||reset.isPending}>{reset.isPending?"Zerando...":"Confirmar exclusão"}</Button>
+          <Button variant="secondary" onClick={()=>{setResetOpen(false);setResetPassword("");setResetReason("")}} disabled={reset.isPending}>Cancelar</Button>
+        </div>
+        {reset.isError&&<ErrorState message={getApiErrorMessage(reset.error)}/>}
+      </div>}
+      {reset.isSuccess&&<p className="mt-3 rounded bg-emerald-50 p-3 text-sm text-emerald-800">Carga zerada: {reset.data.deleted.records} registro(s), {reset.data.deleted.batches} lote(s) e {reset.data.deleted.jobs} job(s) removidos. Clique em &ldquo;Iniciar carga&rdquo; para gerar tudo de novo.</p>}
+      {bootstrap.isSuccess&&<p className="mt-3 rounded bg-cyan-50 p-3 text-sm text-cyan-800">Solicitação enviada. O Connector busca automaticamente a consulta de empresas, mesmo sem empresa ou carga inicial cadastrada. Esta tela será atualizada durante o processamento.</p>}
+      {data.companies.length===0&&<p className="mt-3 rounded bg-amber-50 p-3 text-sm text-amber-800">O ambiente está selecionado, mas nenhuma empresa jurídica foi importada ainda. Execute &ldquo;Atualizar empresas do Consinco&rdquo;; após o Connector processar MAX_EMPRESA_V1, a empresa aparecerá aqui automaticamente.</p>}
+      {(start.isError||bootstrap.isError||resume.isError||retry.isError||approve.isError||reject.isError)&&<ErrorState message="A operação não foi concluída. Verifique consultas ativas, serviço de banco habilitado e estado da carga."/>}
+    </Card>
+    <Card className="overflow-x-auto"><table className="w-full min-w-[760px] text-left text-sm"><thead><tr>{["Consulta","Versão","Recorte","Status","Solicitado","Erro","Ação"].map(l=><th key={l} className="border-b p-3 text-xs uppercase text-slate-500">{l}</th>)}</tr></thead><tbody>{data.jobs.slice(0,50).map(job=><tr className="border-t" key={job.id}><td className="p-3 font-mono text-xs">{displayName(job.queryCode)}</td><td>v{job.queryVersion}</td><td className="text-xs text-slate-600">{jobScopeLabel(job.parameters)||"—"}</td><td><StatusBadge value={job.status}/></td><td className="whitespace-nowrap">{new Date(job.requestedAt).toLocaleString("pt-BR")}</td><td className="max-w-xs truncate text-red-700" title={job.errorMessage||""}>{job.errorMessage||"—"}</td><td>{["FAILED","EXPIRED"].includes(job.status)?<Button variant="secondary" onClick={()=>retry.mutate(job.id)} disabled={retry.isPending}>Reenfileirar</Button>:"—"}</td></tr>)}</tbody></table>{!data.jobs.length&&<p className="p-6 text-center text-sm text-slate-500">Nenhum job encontrado{statusFilter?" para este status":""}. Selecione o Connector e clique em Iniciar carga.</p>}</Card>
+  </>;
+}
 
 // Parâmetros declarados pela consulta, além de updatedAfter (sempre com default automático de
 // sincronismo incremental — não faz sentido o operador digitar isso na mão). Deixados em branco,

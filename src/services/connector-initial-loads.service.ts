@@ -11,7 +11,7 @@ function unwrap<T>(payload: ApiResponse<T> | T): T {
 }
 
 export const connectorInitialLoadsService = {
-  list: async (companyId?:string) => unwrap((await api.get<ApiResponse<ConnectorLoadPanel> | ConnectorLoadPanel>("/connector-initial-loads", { params: companyId ? { companyId } : undefined })).data),
+  list: async (params?:{companyId?:string;status?:"PENDING"|"RUNNING"|"COMPLETED"|"FAILED"}) => unwrap((await api.get<ApiResponse<ConnectorLoadPanel> | ConnectorLoadPanel>("/connector-initial-loads", { params })).data),
   start: async (connectorId:string, companyId:string) => unwrap((await api.post<ApiResponse<ConnectorInitialLoad & {scheduledJobs:number}> | (ConnectorInitialLoad & {scheduledJobs:number})>("/connector-initial-loads", { connectorId, companyId })).data),
   bootstrap: async (connectorId:string) => unwrap((await api.post<ApiResponse<{success:boolean;duplicate:boolean}> | {success:boolean;duplicate:boolean}>("/connector-initial-loads/bootstrap", { connectorId })).data),
   resume: async (loadId:string) => unwrap((await api.post<ApiResponse<{success:boolean;status:string;scheduledJobs:number}> | {success:boolean;status:string;scheduledJobs:number}>(`/connector-initial-loads/${loadId}/resume`)).data),
