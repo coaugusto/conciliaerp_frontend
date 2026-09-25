@@ -42,6 +42,11 @@ export default function FiscalAlertsPage(){
   const detailRef=useRef<HTMLDivElement>(null);
   const hasData=Boolean(alerts.data);
   useEffect(()=>{if(initialGroup&&hasData)detailRef.current?.scrollIntoView({behavior:"smooth",block:"start"});},[initialGroup,hasData]);
+  // Clicar num card troca o conteúdo do quadro de detalhe, mas não a posição de rolagem — se o
+  // usuário já tivesse rolado pra baixo lendo a pendência anterior (às vezes centenas de linhas),
+  // o quadro novo aparecia "no meio", parecendo que tudo estava sendo listado de uma vez. Rolar de
+  // volta pro topo do quadro a cada troca deixa claro que é uma pendência nova, começando do início.
+  const selectGroup=(id:string)=>{setSelectedId(id);requestAnimationFrame(()=>detailRef.current?.scrollIntoView({behavior:"smooth",block:"start"}));};
   const [entity,setEntity]=useState<FiscalAlertEntity|"ALL">("ALL");
   const [search,setSearch]=useState("");
   const visible=useMemo(()=>(alerts.data??[]).filter(group=>entity==="ALL"||group.entity===entity),[alerts.data,entity]);
@@ -61,7 +66,7 @@ export default function FiscalAlertsPage(){
     {validation.isError&&<div role="alert" className="mb-5"><ErrorState message={getApiErrorMessage(validation.error)}/></div>}
     <FiscalInconsistenciesCard/>
     <div className="mb-5 flex max-w-5xl flex-wrap gap-2">{(["ALL","PRODUCT","TAXATION","DOCUMENT","SPED","FAMILY","SUPPLIER"] as const).map(value=><Button key={value} variant={entity===value?"primary":"secondary"} onClick={()=>{setEntity(value);setSelectedId(undefined);}}>{value==="ALL"?"Todas":entityLabel[value]}</Button>)}</div>
-    {alerts.isLoading?<PageLoader/>:<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{visible.map(group=><AlertCard key={group.id} group={group} selected={selected?.id===group.id} select={()=>setSelectedId(group.id)}/>)}</div>}
+    {alerts.isLoading?<PageLoader/>:<div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{visible.map(group=><AlertCard key={group.id} group={group} selected={selected?.id===group.id} select={()=>selectGroup(group.id)}/>)}</div>}
     {selected&&<div ref={detailRef} className="scroll-mt-4"><Card className="mt-6 overflow-visible">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 p-5"><div><p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">{entityLabel[selected.entity]} · {selected.field}</p><h2 className="mt-1 text-lg font-bold text-slate-900">{selected.title}</h2><p className="mt-1 text-sm text-slate-500">{selected.kind==="COMPLIANCE"?"Produtos que cumprem a regra, com a evidência encontrada nas notas fiscais.":"Comparação da situação atual com a sugestão de correção."}</p></div><label className="flex h-10 items-center gap-2 rounded-lg border border-slate-300 px-3"><Search size={16} className="text-slate-400"/><input value={search} onChange={event=>setSearch(event.target.value)} className="min-w-48 bg-transparent text-sm outline-none" placeholder="Pesquisar nesta pendência"/></label></div>
       <AlertItems group={selected} search={search}/>
