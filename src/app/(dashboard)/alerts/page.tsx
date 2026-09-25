@@ -5,7 +5,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Building2, Check, CheckCircle2, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Download, Edit3, FileText, FileWarning, Layers3, LoaderCircle, PackageSearch, Search, ShieldAlert, ShieldCheck, Upload } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader, PageLoader, money } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
-import { fiscalComplianceService } from "@/services/fiscal-compliance.service";
+import { fiscalComplianceService, DOCUMENT_ITEM_DETAIL_RULES, type DocumentItemsGroup } from "@/services/fiscal-compliance.service";
 import { useTabSearchParams } from "@/providers/tabs-provider";
 import { fiscalAlertsService, type FiscalAlertEntity, type FiscalAlertGroup, type FiscalAlertItem, type FiscalAlertSeverity, type FiscalSuggestionReference, type SpedAlertContext } from "@/services/fiscal-alerts.service";
 import { exportAlertsWorkbook } from "./export";
@@ -119,6 +119,11 @@ function AlertRow({group,item,onSent}:{group:FiscalAlertGroup;item:FiscalAlertIt
   const rawHref=item.href??(catalogId?`/catalog-review?productId=${encodeURIComponent(catalogId)}&code=${encodeURIComponent(item.code)}`:null);
   const href=rawHref?`${rawHref}${rawHref.includes("?")?"&":"?"}from=alerts`:null;
   const hasTooltip=Boolean(item.suggestionReference)||Boolean(item.spedContext);
+  // DOCUMENT_ITEM_DETAIL_RULES: pendências item-a-item cujo finding só cita "N de M item(ns)..." —
+  // "Ver notas" abre o detalhe completo (cabeçalho + itens da nota), pra não deixar essas sempre
+  // "Não acionável" sem nenhum jeito de inspecionar quais documentos/itens reais geraram a pendência.
+  const canShowDocuments=group.entity==="DOCUMENT"&&(DOCUMENT_ITEM_DETAIL_RULES as readonly string[]).includes(group.id);
+  const [showDocuments,setShowDocuments]=useState(false);
   return <tr className="border-b border-slate-100 align-top last:border-0 hover:bg-slate-50">
     <td className="p-3"><strong className="block text-slate-900">{item.description}</strong><span className="font-mono text-xs text-slate-500">{item.code}</span></td>
     <td className="p-3 font-mono text-xs text-slate-700">{item.ncm||"—"}</td>
@@ -133,7 +138,7 @@ function AlertRow({group,item,onSent}:{group:FiscalAlertGroup;item:FiscalAlertIt
     <td className="p-3 text-right">
       {isCompliance?<span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"><ShieldCheck size={14}/>Conforme</span>
        :queue.isSuccess?<span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"><CheckCircle2 size={14}/>Enviado</span>
-       :nonActionable?<span className="text-xs text-slate-500" title={item.nonActionableReason}>Não acionável</span>
+       :nonActionable?<div className="inline-flex flex-col items-end gap-1"><span className="text-xs text-slate-500" title={item.nonActionableReason}>Não acionável</span>{canShowDocuments&&<Button variant="secondary" onClick={()=>setShowDocuments(true)} className="h-7 px-2 text-xs"><FileText size={12}/>Ver notas</Button>}{showDocuments&&<DocumentItemsModal productId={item.code} rule={group.id} subtitle={`${group.title} — ${item.description}`} close={()=>setShowDocuments(false)}/>}</div>
        :<div className="inline-flex flex-col items-end gap-1">
           <div className="flex flex-wrap items-center justify-end gap-1.5">
             {cosmosUrl&&<a href={cosmosUrl} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center gap-1 rounded-lg border border-cyan-300 px-2 text-xs font-semibold text-cyan-800 hover:bg-cyan-50" title="Consultar no Cosmos — confira marca, sabor, peso e embalagem">Cosmos ↗</a>}
@@ -196,5 +201,62 @@ function SuggestionDetails({id,source,reference,spedContext}:{id:string;source:s
   const rows=[["Tabela de referência",reference?.table],["Origem",reference?.origin??source],["Estado do cliente",reference?.clientState],["Regra aplicada",reference?.rule],["Motivo",reference?.reason]];
   if(spedContext)rows.push(["Escrituração",spedContext.bookkeeping==="EFD_CONTRIBUTIONS"?"EFD-Contribuições":"EFD ICMS/IPI"],["Registro",[spedContext.record,spedContext.parentRecord&&`pai ${spedContext.parentRecord}`,spedContext.line&&`linha ${spedContext.line}`].filter(Boolean).join(" · ")||undefined],["Registros relacionados",spedContext.relatedRecords.join(", ")||undefined],["Arquivo",spedContext.sourceFile]);
   return <div id={id} role="tooltip" className="pointer-events-none invisible absolute bottom-[calc(100%+8px)] left-0 z-20 w-72 translate-y-1 rounded-lg bg-slate-900 p-4 text-left normal-case text-white opacity-0 shadow-xl transition group-hover:visible group-hover:translate-y-0 group-hover:opacity-100 group-focus:visible group-focus:translate-y-0 group-focus:opacity-100"><p className="mb-2 text-xs font-bold uppercase tracking-wide text-cyan-300">Referência da sugestão</p><dl className="grid gap-2">{rows.map(([label,value])=><div key={label}><dt className="text-[11px] text-slate-400">{label}</dt><dd className="text-xs font-medium">{value||"Não informado pela regra"}</dd></div>)}</dl><span className="absolute -bottom-1 left-6 size-2 rotate-45 bg-slate-900"/></div>;
+}
+// "2026-04-15" ou "2026-04-15T00:00:00.000Z" (Oracle DATE extraído vira timestamp ISO) — sempre os
+// 10 primeiros caracteres são a data; reformata por string em vez de `new Date(...)`, que em fuso
+// negativo (Brasil) mostraria o dia anterior pra uma data-only sem horário.
+const formatDate=(value:string)=>{const [y,m,d]=value.slice(0,10).split("-");return y&&m&&d?`${d}/${m}/${y}`:value||"—";};
+const taxCell=(cst:string|null,base:number|null,rate:number|null,value:number|null)=>base==null&&rate==null&&value==null?"—":<>{cst&&<span className="text-slate-500">CST {cst} · </span>}{money(base??0)} × {rate??0}% = <strong>{money(value??0)}</strong></>;
+/** Cabeçalho + itens de UMA nota — uma pendência item-a-item pode ter vários itens do mesmo produto
+ * na mesma nota (ex.: lançamento duplicado, devolução parcial), por isso agrupado por documento em
+ * vez de uma lista plana de itens. */
+function DocumentGroupCard({document}:{document:DocumentItemsGroup}){
+  const operationLabel=document.operationType==="S"?"Saída":document.operationType==="E"?"Entrada":document.operationType||"—";
+  return <div className="mt-3 overflow-hidden rounded-lg border border-slate-200">
+    <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 p-3 text-sm">
+      <div><strong className="block text-slate-900">Nota {document.documentNumber??"—"}{document.documentSeries?` · série ${document.documentSeries}`:""}</strong><span className="font-mono text-xs text-slate-500">{document.documentKey}</span></div>
+      <div className="flex flex-wrap items-center gap-3 text-xs text-slate-600"><span>Emissão {formatDate(document.issueDate)}</span><span>{operationLabel}</span><span>CGO {document.cgo||"—"}</span>{document.documentTotal!=null&&<span className="font-semibold text-slate-900">{money(document.documentTotal)}</span>}</div>
+    </div>
+    <div className="overflow-x-auto"><table className="w-full text-left text-xs">
+      <thead><tr className="border-b border-slate-100 text-slate-500"><th className="p-2">Item</th><th className="p-2">CFOP</th><th className="p-2">NCM</th><th className="p-2">ICMS</th><th className="p-2">PIS</th><th className="p-2">Cofins</th><th className="p-2">IPI/CBS/IBS</th></tr></thead>
+      <tbody>{document.items.map(item=><tr key={item.item_number} className="border-b border-slate-50 last:border-0">
+        <td className="p-2 font-mono">{item.item_number}</td>
+        <td className="p-2">{item.cfop||"—"}</td>
+        <td className="p-2">{item.ncm||"—"}</td>
+        <td className="p-2">{taxCell(item.icms_cst,item.icms_base,item.icms_rate,item.icms_value)}</td>
+        <td className="p-2">{taxCell(item.pis_cst,item.pis_base,item.pis_rate,item.pis_value)}</td>
+        <td className="p-2">{taxCell(item.cofins_cst,item.cofins_base,item.cofins_rate,item.cofins_value)}</td>
+        <td className="p-2">{[item.ipi_value!=null&&`IPI ${money(item.ipi_value)}`,item.cbs_value!=null&&`CBS ${money(item.cbs_value)}`,item.ibs_value!=null&&`IBS ${money(item.ibs_value)}`].filter(Boolean).join(" · ")||"—"}</td>
+      </tr>)}</tbody>
+    </table></div>
+  </div>;
+}
+/** Abre sob demanda (sem cache entre aberturas — useQuery já cuida disso pela queryKey) a lista
+ * completa de itens de nota fiscal de uma pendência, paginada por documento. */
+function DocumentItemsModal({productId,rule,subtitle,close}:{productId:string;rule:string;subtitle:string;close:()=>void}){
+  const [page,setPage]=useState(1);
+  const query=useQuery({queryKey:["fiscal-compliance","document-items",productId,rule,page],queryFn:()=>fiscalComplianceService.documentItems(productId,rule,page)});
+  const data=query.data;
+  const totalPages=data?Math.max(1,Math.ceil(data.totalCount/data.pageSize)):1;
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4" onClick={close}>
+    <div role="dialog" aria-modal="true" aria-labelledby="document-items-title" className="max-h-[85vh] w-full max-w-4xl overflow-y-auto rounded-xl bg-white p-5 shadow-xl" onClick={event=>event.stopPropagation()}>
+      <div className="flex items-start justify-between gap-3 border-b border-slate-200 pb-3">
+        <div><h2 id="document-items-title" className="text-lg font-bold text-slate-900">Itens de nota fiscal</h2><p className="mt-1 text-sm text-slate-500">{subtitle}</p></div>
+        <Button variant="ghost" onClick={close}>Fechar</Button>
+      </div>
+      {query.isLoading&&<PageLoader label="Consultando itens de nota fiscal..."/>}
+      {query.isError&&<div className="mt-4"><ErrorState message={getApiErrorMessage(query.error)}/></div>}
+      {data&&!data.documents.length&&<p className="mt-4 text-sm text-slate-500">Nenhum item encontrado para esta pendência.</p>}
+      {data?.documents.map(document=><DocumentGroupCard key={document.documentKey} document={document}/>)}
+      {data&&data.totalCount>data.pageSize&&<div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 pt-3 text-xs text-slate-500">
+        <span>{data.totalCount} item(ns) no total</span>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={()=>setPage(previous=>Math.max(1,previous-1))} disabled={page<=1} className="h-8 px-2"><ChevronLeft size={14}/></Button>
+          <span>Página {page} de {totalPages}</span>
+          <Button variant="secondary" onClick={()=>setPage(previous=>Math.min(totalPages,previous+1))} disabled={page>=totalPages} className="h-8 px-2"><ChevronRight size={14}/></Button>
+        </div>
+      </div>}
+    </div>
+  </div>;
 }
 function EntityIcon({entity}:{entity:FiscalAlertEntity}){if(entity==="PRODUCT")return <PackageSearch size={20}/>;if(entity==="TAXATION")return <ShieldAlert size={20}/>;if(entity==="SPED")return <FileWarning size={20}/>;if(entity==="DOCUMENT")return <FileText size={20}/>;if(entity==="FAMILY")return <Layers3 size={20}/>;return <Building2 size={20}/>}
