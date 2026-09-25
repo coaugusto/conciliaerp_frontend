@@ -93,7 +93,7 @@ export default function CommercialPortal() {
     <Card className="mb-5 max-w-3xl p-5">
       <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 shrink-0 text-cyan-700" size={24} /><div><p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">Agente local</p><h2 className="mt-1 text-lg font-bold text-slate-900">Concilia ERP Connector para Windows</h2><p className="mt-1 max-w-xl text-sm text-slate-500">Instale no servidor ou computador que possui acesso ao ERP. Depois, gere a chave abaixo e use-a no primeiro acesso para vincular o agente ao cliente selecionado.</p>{connectorRelease.data?.available && <p className="mt-3 break-all text-xs text-slate-500">Versão {connectorRelease.data.version} · Windows {connectorRelease.data.architecture}{connectorRelease.data.sha256 ? ` · SHA-256 ${connectorRelease.data.sha256}` : ""}</p>}{connectorRelease.data && !connectorRelease.data.available && <p className="mt-3 text-sm text-amber-700">{connectorRelease.data.message}</p>}</div></div>
-        {connectorRelease.data?.downloadUrl && <a href={connectorRelease.data.downloadUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md bg-[#075d70] px-4 text-sm font-semibold text-white transition hover:bg-[#064e5e]"><Download size={16} />Baixar instalador</a>}
+        {connectorRelease.data?.downloadUrl && <ConnectorInstallerDownloadButton downloadUrl={connectorRelease.data.downloadUrl} fileName={connectorRelease.data.fileName ?? "ConciliaERP-Connector-Setup.exe"} />}
       </div>
       {connectorRelease.isLoading && <PageLoader label="Consultando a versão disponível..."/>}
       {connectorRelease.isError && <div className="mt-4"><ErrorState message="O instalador ainda não foi publicado. Solicite a publicação ao administrador do Concilia ERP." /></div>}
@@ -127,6 +127,19 @@ export default function CommercialPortal() {
 }
 
 function TabDropdown({ title, description, defaultOpen = false, children }: { title: string; description: string; defaultOpen?: boolean; children: React.ReactNode }) { return <details open={defaultOpen || undefined} className="group mb-4 overflow-hidden rounded-xl border border-slate-200 bg-white"><summary className="flex cursor-pointer list-none items-center gap-3 px-5 py-4 marker:hidden"><div className="min-w-0 flex-1"><h2 className="font-bold text-slate-900">{title}</h2><p className="mt-0.5 text-sm text-slate-500">{description}</p></div><ChevronDown size={20} className="shrink-0 text-slate-500 transition-transform group-open:rotate-180" /></summary><div className="border-t border-slate-200 bg-slate-50 p-4 [&>section]:mb-0 [&>section]:max-w-none">{children}</div></details>; }
+
+// downloadUrl relativo ("/connector-desktop/download") = release privada do GitHub, o backend
+// repassa o arquivo autenticado; downloadUrl absoluto (http/https) = link público de terceiros,
+// um <a> normal já basta e evita passar um arquivo grande pela memória do navegador à toa.
+function ConnectorInstallerDownloadButton({ downloadUrl, fileName }: { downloadUrl: string; fileName: string }) {
+  const isProxied = downloadUrl.startsWith("/");
+  const download = useMutation({ mutationFn: () => connectorDesktopService.download(fileName) });
+  if (!isProxied) return <a href={downloadUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 shrink-0 items-center justify-center gap-2 rounded-md bg-[#075d70] px-4 text-sm font-semibold text-white transition hover:bg-[#064e5e]"><Download size={16} />Baixar instalador</a>;
+  return <div className="shrink-0">
+    <Button onClick={() => download.mutate()} disabled={download.isPending}><Download size={16} />{download.isPending ? "Baixando..." : "Baixar instalador"}</Button>
+    {download.isError && <p className="mt-2 max-w-xs text-xs text-red-600">{getApiErrorMessage(download.error)}</p>}
+  </div>;
+}
 
 function ConnectorSeedCard({ tenantId, tenantName, tenantSlug }: { tenantId: string; tenantName: string; tenantSlug: string }) {
   const [machineName, setMachineName] = useState("");
