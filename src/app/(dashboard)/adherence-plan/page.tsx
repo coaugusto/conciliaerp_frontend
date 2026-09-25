@@ -140,11 +140,13 @@ function RecipientsCard() {
   const remove = useMutation({ mutationFn: (id: string) => adherencePlanService.removeRecipient(id), onSuccess: invalidate });
   const download = useMutation({ mutationFn: () => adherencePlanService.downloadPdf() });
   const openInfographic = useMutation({ mutationFn: () => adherencePlanService.openInfographic() });
+  const openConfigurationAlerts = useMutation({ mutationFn: () => adherencePlanService.openConfigurationAlertsInfographic() });
+  const downloadConfigurationAlerts = useMutation({ mutationFn: () => adherencePlanService.downloadConfigurationAlertsPdf() });
   const send = useMutation({ mutationFn: () => adherencePlanService.sendNow(), onSuccess: () => qc.invalidateQueries({ queryKey: ["adherence-plan-versions"] }) });
   const createVersion = useMutation({ mutationFn: () => adherencePlanService.createVersion(), onSuccess: () => qc.invalidateQueries({ queryKey: ["adherence-plan-versions"] }) });
   return <Card className="mb-5 p-4 print:hidden">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h3 className="font-bold text-slate-900">Relatório por e-mail</h3><p className="mt-0.5 text-sm max-w-xl text-slate-500">Cadastre quem recebe o Plano de Aderência — cards com os tópicos no corpo do e-mail, infográfico e detalhes completos no PDF anexado.</p></div>
+      <div><h3 className="font-bold text-slate-900">Relatório por e-mail</h3><p className="mt-0.5 text-sm max-w-xl text-slate-500">Cadastre quem recebe o Plano de Aderência — cards com os tópicos no corpo do e-mail, infográfico e detalhes completos no PDF anexado. Os Alertas de Configuração (fora do checklist de PA&apos;s) vão num bloco e num PDF separados.</p></div>
       <div className="flex shrink-0 flex-wrap gap-2">
         <Button variant="secondary" onClick={() => openInfographic.mutate()} disabled={openInfographic.isPending}><ImageIcon size={16} />{openInfographic.isPending ? "Abrindo..." : "Ver infográfico"}</Button>
         <Button variant="secondary" onClick={() => download.mutate()} disabled={download.isPending}><Download size={16} />{download.isPending ? "Gerando..." : "Baixar PDF"}</Button>
@@ -152,11 +154,18 @@ function RecipientsCard() {
         <Button onClick={() => send.mutate()} disabled={send.isPending || !recipients.data?.length}><Send size={16} />{send.isPending ? "Enviando..." : "Enviar agora"}</Button>
       </div>
     </div>
+    <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+      <span className="text-xs font-semibold uppercase text-slate-500">Alertas de configuração (fora do checklist de PA&apos;s)</span>
+      <Button variant="secondary" onClick={() => openConfigurationAlerts.mutate()} disabled={openConfigurationAlerts.isPending} className="h-8 px-2.5 text-xs"><ImageIcon size={14} />{openConfigurationAlerts.isPending ? "Abrindo..." : "Ver infográfico"}</Button>
+      <Button variant="secondary" onClick={() => downloadConfigurationAlerts.mutate()} disabled={downloadConfigurationAlerts.isPending} className="h-8 px-2.5 text-xs"><Download size={14} />{downloadConfigurationAlerts.isPending ? "Gerando..." : "Baixar PDF"}</Button>
+    </div>
     {send.isSuccess && <p className="mt-3 rounded bg-emerald-50 p-2 text-sm text-emerald-800">Relatório enviado para {send.data.sent} destinatário(s) e registrado no histórico de versões.</p>}
     {createVersion.isSuccess && <p className="mt-3 rounded bg-emerald-50 p-2 text-sm text-emerald-800">Versão registrada no histórico.</p>}
     {send.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(send.error)} /></div>}
     {download.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(download.error)} /></div>}
     {openInfographic.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(openInfographic.error)} /></div>}
+    {openConfigurationAlerts.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(openConfigurationAlerts.error)} /></div>}
+    {downloadConfigurationAlerts.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(downloadConfigurationAlerts.error)} /></div>}
     {createVersion.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(createVersion.error)} /></div>}
     <div className="mt-4 flex flex-wrap items-end gap-3">
       <label className="text-sm font-semibold text-slate-700">E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1.5 h-10 w-64 rounded border border-slate-300 px-3 text-sm font-normal" placeholder="nome@cliente.com.br" /></label>

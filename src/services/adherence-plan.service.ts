@@ -67,6 +67,10 @@ export const adherencePlanService = {
   downloadGapSectionPdf: (code: GapSectionCode, fileName: string) => downloadBlob(`/adherence-plan/gap-sections/${code}/pdf`, fileName),
   openInfographic: () => openBlob("/adherence-plan/infographic.png"),
   downloadInfographic: () => downloadBlob("/adherence-plan/infographic.png", `plano-aderencia-infografico-${new Date().toISOString().slice(0, 10)}.png`),
+  // Grupo "fora do checklist de PA's" (as nove listas de lacuna/configurado + inconsistências
+  // fiscais) — infográfico e PDF separados do relatório principal, pedido do cliente.
+  openConfigurationAlertsInfographic: () => openBlob("/adherence-plan/configuration-alerts/infographic.png"),
+  downloadConfigurationAlertsPdf: () => downloadBlob("/adherence-plan/configuration-alerts/pdf", `alertas-configuracao-${new Date().toISOString().slice(0, 10)}.pdf`),
   sendNow: async () => (await api.post<ApiResponse<{ sent: number; versionId: string }>>("/adherence-plan/send")).data.data,
   createVersion: async () => (await api.post<ApiResponse<AdherencePlanReportVersion>>("/adherence-plan/versions")).data.data,
   listVersions: async () => (await api.get<ApiResponse<AdherencePlanReportVersion[]>>("/adherence-plan/versions")).data.data,
