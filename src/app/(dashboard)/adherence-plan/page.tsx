@@ -2,10 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ClipboardList, Download, History, Image as ImageIcon, Printer, Search, Send, Trash2 } from "lucide-react";
+import { ChevronDown, ClipboardList, Download, FileText, History, Image as ImageIcon, LoaderCircle, Printer, Search, Send, Trash2 } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader, PageLoader, dateTime } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
-import { adherencePlanService, type AdherencePlanBankAccountGap, type AdherencePlanBudgetModel, type AdherencePlanCgoGap, type AdherencePlanCgoModel, type AdherencePlanItem, type AdherencePlanReportVersion, type AdherencePlanSection, type AdherencePlanSpeciesGap, type AdherencePlanSpeciesModel } from "@/services/adherence-plan.service";
+import { adherencePlanService, type AdherencePlanAccountingModel, type AdherencePlanBankAccountGap, type AdherencePlanBudgetModel, type AdherencePlanCgoGap, type AdherencePlanCgoModel, type AdherencePlanItem, type AdherencePlanReportVersion, type AdherencePlanSection, type AdherencePlanSpeciesGap, type AdherencePlanSpeciesModel, type GapSectionCode } from "@/services/adherence-plan.service";
 import { FiscalInconsistenciesCard } from "@/components/fiscal-inconsistencies-card";
 
 const POSITIVE = new Set(["OK", "SIM", "CONFIGURADO"]);
@@ -21,6 +21,16 @@ function sectionHasGap(section: AdherencePlanSection) {
   return section.items.length === 0 || section.items.some((item) => itemTone(item.value) === "negative");
 }
 type OperationGroup = { operationCode: string; operationDescription: string | null; species: { code: string; description: string | null }[] };
+// Usado tanto para accountingGaps (sem contabilização) quanto accountingModels (com
+// contabilização) — mesmo shape espécie×operação, só a origem muda.
+function groupByOperation(rows: AdherencePlanAccountingModel[]): OperationGroup[] {
+  const map = new Map<string, OperationGroup>();
+  for (const row of rows) {
+    if (!map.has(row.operationCode)) map.set(row.operationCode, { operationCode: row.operationCode, operationDescription: row.operationDescription, species: [] });
+    map.get(row.operationCode)!.species.push({ code: row.speciesCode, description: row.speciesDescription });
+  }
+  return [...map.values()].sort((a, b) => a.operationCode.localeCompare(b.operationCode));
+}
 
 export default function AdherencePlanPage() {
   const [search, setSearch] = useState("");
@@ -32,23 +42,18 @@ export default function AdherencePlanPage() {
   const bankAccountGaps = result.data?.bankAccountGaps ?? [];
   const cgoModels = result.data?.cgoModels ?? [];
   const speciesModels = result.data?.speciesModels ?? [];
+  const accountingModels = result.data?.accountingModels ?? [];
   const budgetModels = result.data?.budgetModels ?? [];
-  const operationGroups = useMemo(() => {
-    const map = new Map<string, OperationGroup>();
-    for (const gap of accountingGaps) {
-      if (!map.has(gap.operationCode)) map.set(gap.operationCode, { operationCode: gap.operationCode, operationDescription: gap.operationDescription, species: [] });
-      map.get(gap.operationCode)!.species.push({ code: gap.speciesCode, description: gap.speciesDescription });
-    }
-    return [...map.values()].sort((a, b) => a.operationCode.localeCompare(b.operationCode));
-  }, [accountingGaps]);
+  const operationGroups = useMemo(() => groupByOperation(accountingGaps), [accountingGaps]);
+  const operationModelGroups = useMemo(() => groupByOperation(accountingModels), [accountingModels]);
   const term = search.trim().toLocaleLowerCase("pt-BR");
   const visibleSections = useMemo(() => !term ? sections : sections.filter((section) =>
     `${section.code} ${section.title}`.toLocaleLowerCase("pt-BR").includes(term) ||
     section.items.some((item) => `${item.label} ${item.value}`.toLocaleLowerCase("pt-BR").includes(term))
   ), [sections, term]);
   const gaps = sections.filter(sectionHasGap).length;
-  const hasAnyData = sections.length > 0 || cgoGaps.length > 0 || accountingGaps.length > 0 || speciesAccountGaps.length > 0 || bankAccountGaps.length > 0 || cgoModels.length > 0 || speciesModels.length > 0 || budgetModels.length > 0;
-  const hasPrintableGaps = cgoGaps.length > 0 || accountingGaps.length > 0 || bankAccountGaps.length > 0 || speciesAccountGaps.length > 0 || cgoModels.length > 0 || speciesModels.length > 0 || budgetModels.length > 0;
+  const hasAnyData = sections.length > 0 || cgoGaps.length > 0 || accountingGaps.length > 0 || speciesAccountGaps.length > 0 || bankAccountGaps.length > 0 || cgoModels.length > 0 || speciesModels.length > 0 || accountingModels.length > 0 || budgetModels.length > 0;
+  const hasPrintableGaps = cgoGaps.length > 0 || accountingGaps.length > 0 || bankAccountGaps.length > 0 || speciesAccountGaps.length > 0 || cgoModels.length > 0 || speciesModels.length > 0 || accountingModels.length > 0 || budgetModels.length > 0;
 
   return <>
     <PageHeader title="Plano de Aderência" description="Processos do ERP configurados na base do cliente — use antes do go-live e em reuniões de status." action={hasPrintableGaps ? <Button variant="secondary" onClick={() => window.print()} className="print:hidden"><Printer size={16} />Imprimir lacunas</Button> : undefined} />
@@ -63,26 +68,29 @@ export default function AdherencePlanPage() {
       </div>
       <p className="mb-5 hidden text-sm text-slate-500 print:block">Lacunas de configuração — {result.data?.lastSyncedAt ? `sincronizado em ${dateTime(result.data.lastSyncedAt)}` : "sem sincronização"}</p>
 
-      <GapListSection title="CGOs sem modelo contábil" description="Códigos Gerais de Operação usados em notas, mas sem modelo cadastrado (ABAM_FILTROMODELO)." total={cgoGaps.length}>
+      <GapListSection code="CGO_GAPS" title="CGOs sem modelo contábil" description="Códigos Gerais de Operação usados em notas, mas sem modelo cadastrado (ABAM_FILTROMODELO)." total={cgoGaps.length}>
         {cgoGaps.map((gap) => <CgoGapRow key={gap.cgo} gap={gap} />)}
       </GapListSection>
-      <GapListSection title="Operações sem contabilização" description="Operações usadas em notas com espécies sem modelo configurado para o motor contábil." total={operationGroups.length}>
+      <GapListSection code="ACCOUNTING_GAPS" title="Operações sem contabilização" description="Operações usadas em notas com espécies sem modelo configurado para o motor contábil." total={operationGroups.length}>
         {operationGroups.map((group) => <OperationGroupRow key={group.operationCode} group={group} />)}
       </GapListSection>
-      <GapListSection title="Espécies sem conta contábil" description="Espécies financeiras ativas sem conta contábil vinculada." total={speciesAccountGaps.length}>
+      <GapListSection code="SPECIES_ACCOUNT_GAPS" title="Espécies sem conta contábil" description="Espécies financeiras ativas sem conta contábil vinculada." total={speciesAccountGaps.length}>
         {speciesAccountGaps.map((gap) => <SpeciesGapRow key={gap.speciesCode} gap={gap} />)}
       </GapListSection>
-      <GapListSection title="Contas correntes sem parâmetro contábil" description="Contas correntes ativas sem vínculo contábil (ABAM_FINANCEIROCONF)." total={bankAccountGaps.length}>
+      <GapListSection code="BANK_ACCOUNT_GAPS" title="Contas correntes sem parâmetro contábil" description="Contas correntes ativas sem vínculo contábil (ABAM_FINANCEIROCONF)." total={bankAccountGaps.length}>
         {bankAccountGaps.map((gap) => <BankAccountGapRow key={gap.accountId} gap={gap} />)}
       </GapListSection>
 
-      <GapListSection tone="emerald" title="CGOs com modelo configurado" description="Códigos Gerais de Operação já com modelo cadastrado no motor contábil." total={cgoModels.length}>
+      <GapListSection code="CGO_MODELS" tone="emerald" title="CGOs com modelo configurado" description="Códigos Gerais de Operação já com modelo cadastrado no motor contábil." total={cgoModels.length}>
         {cgoModels.map((model, index) => <CgoModelRow key={index} model={model} />)}
       </GapListSection>
-      <GapListSection tone="emerald" title="Espécies com modelo configurado" description="Espécies financeiras já com modelo cadastrado no motor contábil." total={speciesModels.length}>
+      <GapListSection code="SPECIES_MODELS" tone="emerald" title="Espécies com modelo configurado" description="Espécies financeiras já com modelo cadastrado no motor contábil." total={speciesModels.length}>
         {speciesModels.map((model, index) => <SpeciesModelRow key={index} model={model} />)}
       </GapListSection>
-      <GapListSection tone="emerald" title="Orçamento: naturezas com modelo configurado" description="Naturezas de despesa orçamentária já com modelo cadastrado no motor contábil." total={budgetModels.length}>
+      <GapListSection code="ACCOUNTING_MODELS" tone="emerald" title="Operações com contabilização" description="Operações usadas em notas com espécies JÁ com modelo configurado para o motor contábil — contraparte de 'Operações sem contabilização'." total={operationModelGroups.length}>
+        {operationModelGroups.map((group) => <OperationGroupRow key={group.operationCode} group={group} />)}
+      </GapListSection>
+      <GapListSection code="BUDGET_MODELS" tone="emerald" title="Orçamento: naturezas com modelo configurado" description="Naturezas de despesa orçamentária já com modelo cadastrado no motor contábil." total={budgetModels.length}>
         {budgetModels.map((model, index) => <BudgetModelRow key={index} model={model} />)}
       </GapListSection>
 
@@ -176,24 +184,37 @@ function VersionRow({ version }: { version: AdherencePlanReportVersion }) {
  * mesmo componente. Some da tela quando não há nenhuma pendência dessa lista. O conteúdo fica
  * sempre no DOM (visibilidade controlada por classe, não por render condicional) para que
  * print:!block force tudo visível na impressão, independente do que está aberto na tela. */
-function GapListSection({ title, description, total, tone = "amber", children }: { title: string; description: string; total: number; tone?: "amber" | "emerald"; children: React.ReactNode }) {
+function GapListSection({ code, title, description, total, tone = "amber", children }: { code: GapSectionCode; title: string; description: string; total: number; tone?: "amber" | "emerald"; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   if (!total) return null;
   const badgeClass = tone === "amber" ? "bg-amber-100 text-amber-800" : "bg-emerald-100 text-emerald-800";
   return <Card className={`mb-5 overflow-hidden print:break-inside-avoid ${tone === "amber" ? "border-amber-200" : "border-emerald-200"}`}>
     <div className="flex items-center justify-between gap-3 p-4">
       <div><h3 className="font-bold text-slate-900">{title}</h3><p className="mt-0.5 text-sm text-slate-500">{description}</p></div>
-      <button type="button" onClick={() => setOpen((value) => !value)} className="flex shrink-0 items-center gap-3 print:hidden" aria-expanded={open}>
-        <span className={`rounded-full px-3 py-1 text-sm font-bold ${badgeClass}`}>{total}</span>
-        <ChevronDown size={18} className={`text-slate-500 transition-transform ${open ? "rotate-180" : ""}`} />
-      </button>
-      <span className={`hidden shrink-0 rounded-full px-3 py-1 text-sm font-bold print:inline-block ${badgeClass}`}>{total}</span>
+      <div className="flex shrink-0 items-center gap-2">
+        <ExportSectionPdfButton code={code} title={title} />
+        <button type="button" onClick={() => setOpen((value) => !value)} className="flex items-center gap-3 print:hidden" aria-expanded={open}>
+          <span className={`rounded-full px-3 py-1 text-sm font-bold ${badgeClass}`}>{total}</span>
+          <ChevronDown size={18} className={`text-slate-500 transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
+        <span className={`hidden rounded-full px-3 py-1 text-sm font-bold print:inline-block ${badgeClass}`}>{total}</span>
+      </div>
     </div>
     <div className={`border-t border-slate-200 ${open ? "" : "hidden"} print:!block`}>
       <ul className="divide-y divide-slate-100">{children}</ul>
       <div className="border-t border-slate-100 p-3 text-right print:hidden"><button type="button" onClick={() => setOpen(false)} className="text-sm font-semibold text-cyan-700 hover:underline">Fechar</button></div>
     </div>
   </Card>;
+}
+// Baixa só esta lista em PDF (GET /adherence-plan/gap-sections/:code/pdf) — sem precisar gerar o
+// relatório inteiro pra conferir/compartilhar uma pendência específica.
+function ExportSectionPdfButton({ code, title }: { code: GapSectionCode; title: string }) {
+  const fileName = `plano-aderencia-${title.toLocaleLowerCase("pt-BR").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}-${new Date().toISOString().slice(0, 10)}.pdf`;
+  const download = useMutation({ mutationFn: () => adherencePlanService.downloadGapSectionPdf(code, fileName) });
+  return <button type="button" onClick={(event) => { event.stopPropagation(); download.mutate(); }} disabled={download.isPending} title={`Exportar "${title}" em PDF`} className="flex h-8 items-center gap-1.5 rounded-lg border border-slate-300 px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-60 print:hidden">
+    {download.isPending ? <LoaderCircle size={14} className="animate-spin" /> : <FileText size={14} />}
+    PDF
+  </button>;
 }
 
 function OperationGroupRow({ group }: { group: OperationGroup }) {

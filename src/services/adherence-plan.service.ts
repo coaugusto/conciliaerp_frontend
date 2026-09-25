@@ -9,6 +9,10 @@ export type AdherencePlanBankAccountGap = { accountId: string; companyNumber: st
 export type AdherencePlanCgoModel = { modelId: string; modelDescription: string | null; cgo: string; cgoDescription: string | null };
 export type AdherencePlanSpeciesModel = { modelId: string; modelDescription: string | null; speciesCode: string; speciesDescription: string | null };
 export type AdherencePlanBudgetModel = { modelId: string; modelDescription: string | null; expenseNatureId: string; expenseNatureDescription: string | null };
+// Mesmo shape de AdherencePlanAccountingGap — contraparte positiva (espécie × operação que JÁ tem
+// modelo configurado no motor contábil), pedida pelo cliente como complemento de "Operações sem
+// contabilização".
+export type AdherencePlanAccountingModel = { speciesCode: string; speciesDescription: string | null; operationCode: string; operationDescription: string | null };
 export type AdherencePlanResult = {
   sections: AdherencePlanSection[];
   cgoGaps: AdherencePlanCgoGap[];
@@ -17,9 +21,14 @@ export type AdherencePlanResult = {
   bankAccountGaps: AdherencePlanBankAccountGap[];
   cgoModels: AdherencePlanCgoModel[];
   speciesModels: AdherencePlanSpeciesModel[];
+  accountingModels: AdherencePlanAccountingModel[];
   budgetModels: AdherencePlanBudgetModel[];
   lastSyncedAt: string | null;
 };
+// Espelha GAP_SECTION_CODES do backend (adherence-plan.service.ts) — usado pelo botão "Exportar
+// PDF" de cada quadro.
+export const GAP_SECTION_CODES = ["CGO_GAPS", "ACCOUNTING_GAPS", "SPECIES_ACCOUNT_GAPS", "BANK_ACCOUNT_GAPS", "CGO_MODELS", "SPECIES_MODELS", "ACCOUNTING_MODELS", "BUDGET_MODELS"] as const;
+export type GapSectionCode = (typeof GAP_SECTION_CODES)[number];
 
 export type AdherencePlanRecipient = { id: string; email: string; name: string | null; createdAt: string };
 export type AdherencePlanReportVersion = { id: string; generatedAt: string; generatedBy: string | null; sectionsTotal: number; sectionsWithGap: number; gapItemsTotal: number; pdfFileName: string; pngFileName: string };
@@ -51,6 +60,7 @@ export const adherencePlanService = {
   addRecipient: async (email: string, name?: string) => (await api.post<ApiResponse<AdherencePlanRecipient>>("/adherence-plan/recipients", { email, name })).data.data,
   removeRecipient: async (id: string) => (await api.delete<ApiResponse<{ deleted: boolean }>>(`/adherence-plan/recipients/${id}`)).data.data,
   downloadPdf: () => downloadBlob("/adherence-plan/pdf", `plano-aderencia-${new Date().toISOString().slice(0, 10)}.pdf`),
+  downloadGapSectionPdf: (code: GapSectionCode, fileName: string) => downloadBlob(`/adherence-plan/gap-sections/${code}/pdf`, fileName),
   openInfographic: () => openBlob("/adherence-plan/infographic.png"),
   downloadInfographic: () => downloadBlob("/adherence-plan/infographic.png", `plano-aderencia-infografico-${new Date().toISOString().slice(0, 10)}.png`),
   sendNow: async () => (await api.post<ApiResponse<{ sent: number; versionId: string }>>("/adherence-plan/send")).data.data,
