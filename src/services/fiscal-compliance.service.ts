@@ -11,7 +11,9 @@ export type FiscalProductDetail = { product: ImportedRecord; findings: FiscalFin
 // (cabeçalho + itens da nota) via fiscalComplianceService.documentItems. Espelha
 // DOCUMENT_ITEM_DETAIL_RULES do backend (document-item-stats.ts); CGO_CFOP_MISMATCH e
 // ICMS_CST_CADASTRO_DIVERGENCE ainda não têm essa lista completa (dependem de dado de cadastro).
-export const DOCUMENT_ITEM_DETAIL_RULES = ["DOCUMENT_CONTEXT", "CFOP_DIRECTION", "PIS_COFINS_CST_DIRECTION", "TAX_CALCULATION", "RTC_2026_RATES"] as const;
+// PIS_COFINS_CST_ALIQUOTA_ZERO_NCM é entity "TAXATION", não "DOCUMENT" — mesmo assim entra aqui,
+// porque quem decide se tem detalhe disponível é este código, não a categoria da finding.
+export const DOCUMENT_ITEM_DETAIL_RULES = ["DOCUMENT_CONTEXT", "CFOP_DIRECTION", "PIS_COFINS_CST_DIRECTION", "TAX_CALCULATION", "RTC_2026_RATES", "PIS_COFINS_CST_ALIQUOTA_ZERO_NCM"] as const;
 export type DocumentItemDetail = {
   item_number: string; cfop: string; ncm: string;
   icms_cst: string; icms_base: number | null; icms_rate: number | null; icms_value: number | null;
@@ -21,6 +23,7 @@ export type DocumentItemDetail = {
   ipi_base: number | null; ipi_rate: number | null; ipi_value: number | null;
   cbs_base: number | null; cbs_rate: number | null; cbs_value: number | null;
   ibs_base: number | null; ibs_rate: number | null; ibs_value: number | null;
+  pis_cofins_zero_rate_expected_cst: string | null;
   fcp_base: number | null; fcp_value: number | null;
 };
 export type DocumentItemsGroup = { documentKey: string; documentNumber: string | null; documentSeries: string | null; documentTotal: number | null; issueDate: string; postingDate: string; operationType: string; cgo: string; items: DocumentItemDetail[] };

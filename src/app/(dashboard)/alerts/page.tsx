@@ -122,7 +122,7 @@ function AlertRow({group,item,onSent}:{group:FiscalAlertGroup;item:FiscalAlertIt
   // DOCUMENT_ITEM_DETAIL_RULES: pendências item-a-item cujo finding só cita "N de M item(ns)..." —
   // "Ver notas" abre o detalhe completo (cabeçalho + itens da nota), pra não deixar essas sempre
   // "Não acionável" sem nenhum jeito de inspecionar quais documentos/itens reais geraram a pendência.
-  const canShowDocuments=group.entity==="DOCUMENT"&&(DOCUMENT_ITEM_DETAIL_RULES as readonly string[]).includes(group.id);
+  const canShowDocuments=(DOCUMENT_ITEM_DETAIL_RULES as readonly string[]).includes(group.id);
   const [showDocuments,setShowDocuments]=useState(false);
   return <tr className="border-b border-slate-100 align-top last:border-0 hover:bg-slate-50">
     <td className="p-3"><strong className="block text-slate-900">{item.description}</strong><span className="font-mono text-xs text-slate-500">{item.code}</span></td>
@@ -224,8 +224,8 @@ function DocumentGroupCard({document}:{document:DocumentItemsGroup}){
         <td className="p-2">{item.cfop||"—"}</td>
         <td className="p-2">{item.ncm||"—"}</td>
         <td className="p-2">{taxCell(item.icms_cst,item.icms_base,item.icms_rate,item.icms_value)}</td>
-        <td className="p-2">{taxCell(item.pis_cst,item.pis_base,item.pis_rate,item.pis_value)}</td>
-        <td className="p-2">{taxCell(item.cofins_cst,item.cofins_base,item.cofins_rate,item.cofins_value)}</td>
+        <td className="p-2">{taxCell(item.pis_cst,item.pis_base,item.pis_rate,item.pis_value)}{item.pis_cofins_zero_rate_expected_cst&&item.pis_cst!==item.pis_cofins_zero_rate_expected_cst&&<span className="ml-1 text-red-600">(esperado {item.pis_cofins_zero_rate_expected_cst})</span>}</td>
+        <td className="p-2">{taxCell(item.cofins_cst,item.cofins_base,item.cofins_rate,item.cofins_value)}{item.pis_cofins_zero_rate_expected_cst&&item.cofins_cst!==item.pis_cofins_zero_rate_expected_cst&&<span className="ml-1 text-red-600">(esperado {item.pis_cofins_zero_rate_expected_cst})</span>}</td>
         <td className="p-2">{[item.ipi_value!=null&&`IPI ${money(item.ipi_value)}`,item.cbs_value!=null&&`CBS ${money(item.cbs_value)}`,item.ibs_value!=null&&`IBS ${money(item.ibs_value)}`].filter(Boolean).join(" · ")||"—"}</td>
       </tr>)}</tbody>
     </table></div>
