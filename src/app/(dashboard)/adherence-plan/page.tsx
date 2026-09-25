@@ -2,10 +2,10 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ClipboardList, Download, Printer, Search, Send, Trash2 } from "lucide-react";
+import { ChevronDown, ClipboardList, Download, History, Image as ImageIcon, Printer, Search, Send, Trash2 } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader, PageLoader, dateTime } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
-import { adherencePlanService, type AdherencePlanBankAccountGap, type AdherencePlanBudgetModel, type AdherencePlanCgoGap, type AdherencePlanCgoModel, type AdherencePlanItem, type AdherencePlanSection, type AdherencePlanSpeciesGap, type AdherencePlanSpeciesModel } from "@/services/adherence-plan.service";
+import { adherencePlanService, type AdherencePlanBankAccountGap, type AdherencePlanBudgetModel, type AdherencePlanCgoGap, type AdherencePlanCgoModel, type AdherencePlanItem, type AdherencePlanReportVersion, type AdherencePlanSection, type AdherencePlanSpeciesGap, type AdherencePlanSpeciesModel } from "@/services/adherence-plan.service";
 import { FiscalInconsistenciesCard } from "@/components/fiscal-inconsistencies-card";
 
 const POSITIVE = new Set(["OK", "SIM", "CONFIGURADO"]);
@@ -108,24 +108,32 @@ function EmptyPlan() {
 function RecipientsCard() {
   const qc = useQueryClient();
   const recipients = useQuery({ queryKey: ["adherence-plan-recipients"], queryFn: adherencePlanService.listRecipients });
+  const versions = useQuery({ queryKey: ["adherence-plan-versions"], queryFn: adherencePlanService.listVersions });
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const invalidate = () => qc.invalidateQueries({ queryKey: ["adherence-plan-recipients"] });
   const add = useMutation({ mutationFn: () => adherencePlanService.addRecipient(email.trim(), name.trim() || undefined), onSuccess: () => { setEmail(""); setName(""); invalidate(); } });
   const remove = useMutation({ mutationFn: (id: string) => adherencePlanService.removeRecipient(id), onSuccess: invalidate });
   const download = useMutation({ mutationFn: () => adherencePlanService.downloadPdf() });
-  const send = useMutation({ mutationFn: () => adherencePlanService.sendNow() });
+  const openInfographic = useMutation({ mutationFn: () => adherencePlanService.openInfographic() });
+  const send = useMutation({ mutationFn: () => adherencePlanService.sendNow(), onSuccess: () => qc.invalidateQueries({ queryKey: ["adherence-plan-versions"] }) });
+  const createVersion = useMutation({ mutationFn: () => adherencePlanService.createVersion(), onSuccess: () => qc.invalidateQueries({ queryKey: ["adherence-plan-versions"] }) });
   return <Card className="mb-5 p-4 print:hidden">
     <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h3 className="font-bold text-slate-900">Relatório por e-mail</h3><p className="mt-0.5 text-sm max-w-xl text-slate-500">Cadastre quem recebe o Plano de Aderência — cards com os tópicos no corpo do e-mail, detalhes completos no PDF anexado.</p></div>
+      <div><h3 className="font-bold text-slate-900">Relatório por e-mail</h3><p className="mt-0.5 text-sm max-w-xl text-slate-500">Cadastre quem recebe o Plano de Aderência — cards com os tópicos no corpo do e-mail, infográfico e detalhes completos no PDF anexado.</p></div>
       <div className="flex shrink-0 flex-wrap gap-2">
+        <Button variant="secondary" onClick={() => openInfographic.mutate()} disabled={openInfographic.isPending}><ImageIcon size={16} />{openInfographic.isPending ? "Abrindo..." : "Ver infográfico"}</Button>
         <Button variant="secondary" onClick={() => download.mutate()} disabled={download.isPending}><Download size={16} />{download.isPending ? "Gerando..." : "Baixar PDF"}</Button>
+        <Button variant="secondary" onClick={() => createVersion.mutate()} disabled={createVersion.isPending}><History size={16} />{createVersion.isPending ? "Gerando..." : "Gerar versão"}</Button>
         <Button onClick={() => send.mutate()} disabled={send.isPending || !recipients.data?.length}><Send size={16} />{send.isPending ? "Enviando..." : "Enviar agora"}</Button>
       </div>
     </div>
-    {send.isSuccess && <p className="mt-3 rounded bg-emerald-50 p-2 text-sm text-emerald-800">Relatório enviado para {send.data.sent} destinatário(s).</p>}
+    {send.isSuccess && <p className="mt-3 rounded bg-emerald-50 p-2 text-sm text-emerald-800">Relatório enviado para {send.data.sent} destinatário(s) e registrado no histórico de versões.</p>}
+    {createVersion.isSuccess && <p className="mt-3 rounded bg-emerald-50 p-2 text-sm text-emerald-800">Versão registrada no histórico.</p>}
     {send.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(send.error)} /></div>}
     {download.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(download.error)} /></div>}
+    {openInfographic.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(openInfographic.error)} /></div>}
+    {createVersion.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(createVersion.error)} /></div>}
     <div className="mt-4 flex flex-wrap items-end gap-3">
       <label className="text-sm font-semibold text-slate-700">E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1.5 h-10 w-64 rounded border border-slate-300 px-3 text-sm font-normal" placeholder="nome@cliente.com.br" /></label>
       <label className="text-sm font-semibold text-slate-700">Nome (opcional)<input value={name} onChange={(event) => setName(event.target.value)} className="mt-1.5 h-10 w-48 rounded border border-slate-300 px-3 text-sm font-normal" /></label>
@@ -136,7 +144,31 @@ function RecipientsCard() {
       {recipients.data?.map((recipient) => <li key={recipient.id} className="flex items-center justify-between gap-3 py-2 text-sm"><span>{recipient.email}{recipient.name ? ` — ${recipient.name}` : ""}</span><Button variant="ghost" onClick={() => remove.mutate(recipient.id)} disabled={remove.isPending}><Trash2 size={14} /></Button></li>)}
       {!recipients.data?.length && <p className="py-2 text-sm text-slate-500">Nenhum destinatário cadastrado ainda.</p>}
     </ul>
+    {Boolean(versions.data?.length) && <div className="mt-4 border-t border-slate-200 pt-3">
+      <p className="mb-2 text-xs font-semibold uppercase text-slate-500">Histórico de versões — acompanhamento do início do projeto até o go-live</p>
+      <ul className="divide-y divide-slate-100">
+        {versions.data!.map((version) => <VersionRow key={version.id} version={version} />)}
+      </ul>
+    </div>}
   </Card>;
+}
+
+function VersionRow({ version }: { version: AdherencePlanReportVersion }) {
+  const download = useMutation({ mutationFn: () => adherencePlanService.downloadVersionPdf(version.id, version.pdfFileName) });
+  const openPng = useMutation({ mutationFn: () => adherencePlanService.openVersionPng(version.id) });
+  const healthPercent = version.sectionsTotal ? Math.round(((version.sectionsTotal - version.sectionsWithGap) / version.sectionsTotal) * 100) : 0;
+  const tone = healthPercent >= 80 ? "text-emerald-700 bg-emerald-100" : healthPercent >= 50 ? "text-amber-700 bg-amber-100" : "text-red-700 bg-red-100";
+  return <li className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm">
+    <div className="flex items-center gap-3">
+      <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${tone}`}>{healthPercent}%</span>
+      <span className="text-slate-700">{dateTime(version.generatedAt)}</span>
+      <span className="text-xs text-slate-500">{version.sectionsWithGap} pendência(s) de {version.sectionsTotal} processo(s)</span>
+    </div>
+    <div className="flex gap-2">
+      <Button variant="ghost" onClick={() => openPng.mutate()} disabled={openPng.isPending}><ImageIcon size={14} />Imagem</Button>
+      <Button variant="ghost" onClick={() => download.mutate()} disabled={download.isPending}><Download size={14} />PDF</Button>
+    </div>
+  </li>;
 }
 
 /** Lista expansível com o total sempre visível (mesmo fechada) — cada uma das 4 consultas de

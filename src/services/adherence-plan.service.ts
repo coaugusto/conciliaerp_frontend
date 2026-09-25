@@ -22,22 +22,40 @@ export type AdherencePlanResult = {
 };
 
 export type AdherencePlanRecipient = { id: string; email: string; name: string | null; createdAt: string };
+export type AdherencePlanReportVersion = { id: string; generatedAt: string; generatedBy: string | null; sectionsTotal: number; sectionsWithGap: number; gapItemsTotal: number; pdfFileName: string; pngFileName: string };
+
+// responseType "blob" passa pelo mesmo axios com o header de autenticação — um <a href> ou
+// window.open direto na URL da API não carregaria o token, já que o download/visualização é
+// sempre autenticado por tenant. Mesmo padrão de connector-package.service.ts.
+async function downloadBlob(url: string, fileName: string) {
+  const response = await api.get(url, { responseType: "blob" });
+  const objectUrl = URL.createObjectURL(response.data);
+  const anchor = document.createElement("a");
+  anchor.href = objectUrl;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(objectUrl);
+}
+// Abre numa aba nova em vez de baixar — "possa abrir" (visualizar), não necessariamente salvar.
+async function openBlob(url: string) {
+  const response = await api.get(url, { responseType: "blob" });
+  const objectUrl = URL.createObjectURL(response.data);
+  window.open(objectUrl, "_blank");
+  // Sem revoke imediato: a aba nova ainda está carregando o blob quando este código continua.
+  setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+}
 
 export const adherencePlanService = {
   get: async () => (await api.get<ApiResponse<AdherencePlanResult>>("/adherence-plan")).data.data,
   listRecipients: async () => (await api.get<ApiResponse<AdherencePlanRecipient[]>>("/adherence-plan/recipients")).data.data,
   addRecipient: async (email: string, name?: string) => (await api.post<ApiResponse<AdherencePlanRecipient>>("/adherence-plan/recipients", { email, name })).data.data,
   removeRecipient: async (id: string) => (await api.delete<ApiResponse<{ deleted: boolean }>>(`/adherence-plan/recipients/${id}`)).data.data,
-  // responseType "blob" passa pelo mesmo axios com o header de autenticação — mesmo padrão de
-  // connector-package.service.ts e tax-impact-simulator.service.ts.
-  downloadPdf: async () => {
-    const response = await api.get("/adherence-plan/pdf", { responseType: "blob" });
-    const url = URL.createObjectURL(response.data);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `plano-aderencia-${new Date().toISOString().slice(0, 10)}.pdf`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  },
-  sendNow: async () => (await api.post<ApiResponse<{ sent: number }>>("/adherence-plan/send")).data.data,
+  downloadPdf: () => downloadBlob("/adherence-plan/pdf", `plano-aderencia-${new Date().toISOString().slice(0, 10)}.pdf`),
+  openInfographic: () => openBlob("/adherence-plan/infographic.png"),
+  downloadInfographic: () => downloadBlob("/adherence-plan/infographic.png", `plano-aderencia-infografico-${new Date().toISOString().slice(0, 10)}.png`),
+  sendNow: async () => (await api.post<ApiResponse<{ sent: number; versionId: string }>>("/adherence-plan/send")).data.data,
+  createVersion: async () => (await api.post<ApiResponse<AdherencePlanReportVersion>>("/adherence-plan/versions")).data.data,
+  listVersions: async () => (await api.get<ApiResponse<AdherencePlanReportVersion[]>>("/adherence-plan/versions")).data.data,
+  downloadVersionPdf: (id: string, fileName: string) => downloadBlob(`/adherence-plan/versions/${id}/pdf`, fileName),
+  openVersionPng: (id: string) => openBlob(`/adherence-plan/versions/${id}/png`),
 };
