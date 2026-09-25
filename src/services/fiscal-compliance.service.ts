@@ -9,11 +9,11 @@ export type TaxationOperationGroup = { code: string; direction: "ENTRADA" | "SAI
 export type FiscalProductDetail = { product: ImportedRecord; findings: FiscalFinding[]; compliance?: FiscalComplianceCheck[]; family: { id: string; description: string | null; classification: ImportedRecord[]; relatedProducts: { productId: string; description: string; ncm: string | null }[] }; taxation: { profiles: ImportedRecord[]; rulesByState: ImportedRecord[]; byOperation: TaxationOperationGroup[]; defaultRates: ImportedRecord[] }; packaging: ImportedRecord[]; suppliers: ImportedRecord[]; accessCodes: ImportedRecord[]; documentItems: ImportedRecord[] };
 // Pendências item-a-item cujo finding só cita "N de M item(ns)..." — abrem o detalhe completo
 // (cabeçalho + itens da nota) via fiscalComplianceService.documentItems. Espelha
-// DOCUMENT_ITEM_DETAIL_RULES do backend (document-item-stats.ts); CGO_CFOP_MISMATCH e
-// ICMS_CST_CADASTRO_DIVERGENCE ainda não têm essa lista completa (dependem de dado de cadastro).
-// PIS_COFINS_CST_ALIQUOTA_ZERO_NCM é entity "TAXATION", não "DOCUMENT" — mesmo assim entra aqui,
-// porque quem decide se tem detalhe disponível é este código, não a categoria da finding.
-export const DOCUMENT_ITEM_DETAIL_RULES = ["DOCUMENT_CONTEXT", "CFOP_DIRECTION", "PIS_COFINS_CST_DIRECTION", "TAX_CALCULATION", "RTC_2026_RATES", "PIS_COFINS_CST_ALIQUOTA_ZERO_NCM"] as const;
+// DOCUMENT_ITEM_DETAIL_RULES do backend (document-item-stats.ts) — agora as oito pendências
+// item-a-item têm o mesmo botão "Ver notas", pra não deixar algumas com o comportamento diferente
+// das outras. PIS_COFINS_CST_ALIQUOTA_ZERO_NCM é entity "TAXATION", não "DOCUMENT" — mesmo assim
+// entra aqui, porque quem decide se tem detalhe disponível é este código, não a categoria da finding.
+export const DOCUMENT_ITEM_DETAIL_RULES = ["DOCUMENT_CONTEXT", "CFOP_DIRECTION", "PIS_COFINS_CST_DIRECTION", "TAX_CALCULATION", "RTC_2026_RATES", "PIS_COFINS_CST_ALIQUOTA_ZERO_NCM", "CGO_CFOP_MISMATCH", "ICMS_CST_CADASTRO_DIVERGENCE"] as const;
 export type DocumentItemDetail = {
   item_number: string; cfop: string; ncm: string;
   icms_cst: string; icms_base: number | null; icms_rate: number | null; icms_value: number | null;
