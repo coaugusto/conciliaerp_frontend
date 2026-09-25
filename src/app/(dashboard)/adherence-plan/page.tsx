@@ -31,6 +31,17 @@ function groupByOperation(rows: AdherencePlanAccountingModel[]): OperationGroup[
   }
   return [...map.values()].sort((a, b) => a.operationCode.localeCompare(b.operationCode));
 }
+type ModelGroup = { modelId: string; modelDescription: string | null; species: { code: string; description: string | null }[] };
+// SPECIES_MODELS_V1 não tem operação (só modelo × espécie) — mesmo agrupamento visual da lista de
+// operações, mas por Modelo, que é a única dimensão que esses dados realmente têm.
+function groupByModel(rows: AdherencePlanSpeciesModel[]): ModelGroup[] {
+  const map = new Map<string, ModelGroup>();
+  for (const row of rows) {
+    if (!map.has(row.modelId)) map.set(row.modelId, { modelId: row.modelId, modelDescription: row.modelDescription, species: [] });
+    map.get(row.modelId)!.species.push({ code: row.speciesCode, description: row.speciesDescription });
+  }
+  return [...map.values()].sort((a, b) => a.modelId.localeCompare(b.modelId));
+}
 
 export default function AdherencePlanPage() {
   const [search, setSearch] = useState("");
@@ -47,6 +58,7 @@ export default function AdherencePlanPage() {
   const budgetModels = result.data?.budgetModels ?? [];
   const operationGroups = useMemo(() => groupByOperation(accountingGaps), [accountingGaps]);
   const operationModelGroups = useMemo(() => groupByOperation(accountingModels), [accountingModels]);
+  const speciesModelGroups = useMemo(() => groupByModel(speciesModels), [speciesModels]);
   const term = search.trim().toLocaleLowerCase("pt-BR");
   const visibleSections = useMemo(() => !term ? sections : sections.filter((section) =>
     `${section.code} ${section.title}`.toLocaleLowerCase("pt-BR").includes(term) ||
@@ -88,8 +100,8 @@ export default function AdherencePlanPage() {
       <GapListSection code="CGO_MODELS" tone="emerald" title="CGOs com modelo configurado" description="Códigos Gerais de Operação já com modelo cadastrado no motor contábil." total={cgoModels.length}>
         {cgoModels.map((model, index) => <CgoModelRow key={index} model={model} />)}
       </GapListSection>
-      <GapListSection code="SPECIES_MODELS" tone="emerald" title="Espécies com modelo configurado" description="Espécies financeiras já com modelo cadastrado no motor contábil." total={speciesModels.length}>
-        {speciesModels.map((model, index) => <SpeciesModelRow key={index} model={model} />)}
+      <GapListSection code="SPECIES_MODELS" tone="emerald" title="Espécies com modelo configurado" description="Espécies financeiras já com modelo cadastrado no motor contábil." total={speciesModelGroups.length}>
+        {speciesModelGroups.map((group) => <ModelGroupRow key={group.modelId} group={group} />)}
       </GapListSection>
       <GapListSection code="ACCOUNTING_MODELS" tone="emerald" title="Operações com contabilização" description="Operações usadas em notas com espécies JÁ com modelo configurado para o motor contábil — contraparte de 'Operações sem contabilização'." total={operationModelGroups.length}>
         {operationModelGroups.map((group) => <OperationGroupRow key={group.operationCode} group={group} />)}
@@ -260,10 +272,18 @@ function CgoModelRow({ model }: { model: AdherencePlanCgoModel }) {
     <span><span className="font-mono font-semibold text-slate-800">CGO {model.cgo}</span>{model.cgoDescription && <span className="ml-2 text-slate-700">{model.cgoDescription}</span>}</span>
   </li>;
 }
-function SpeciesModelRow({ model }: { model: AdherencePlanSpeciesModel }) {
-  return <li className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm">
-    <span className="font-mono text-xs text-slate-500">Modelo {model.modelId}{model.modelDescription ? ` · ${model.modelDescription}` : ""}</span>
-    <span><span className="font-mono font-semibold text-slate-800">{model.speciesCode}</span>{model.speciesDescription && <span className="ml-2 text-slate-700">{model.speciesDescription}</span>}</span>
+function ModelGroupRow({ group }: { group: ModelGroup }) {
+  const [open, setOpen] = useState(false);
+  return <li className="p-3">
+    <button type="button" onClick={() => setOpen((value) => !value)} className="flex w-full items-center justify-between gap-3 text-left print:hidden" aria-expanded={open}>
+      <span className="font-mono text-sm text-slate-700">Modelo {group.modelId}{group.modelDescription ? ` · ${group.modelDescription}` : ""}</span>
+      <span className="flex shrink-0 items-center gap-2"><span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">{group.species.length}</span><ChevronDown size={16} className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} /></span>
+    </button>
+    <p className="hidden font-mono text-sm font-semibold text-slate-700 print:block">Modelo {group.modelId}{group.modelDescription ? ` · ${group.modelDescription}` : ""} — {group.species.length} espécie(s)</p>
+    <ul className={`${open ? "" : "hidden"} print:!block mt-2 space-y-1 border-l-2 border-emerald-100 pl-3`}>
+      {group.species.map((species, index) => <li key={index} className="text-xs text-slate-600">ESP {species.code}{species.description ? ` · ${species.description}` : ""}</li>)}
+    </ul>
+    {open && <button type="button" onClick={() => setOpen(false)} className="mt-2 text-xs font-semibold text-cyan-700 hover:underline print:hidden">Fechar</button>}
   </li>;
 }
 function BudgetModelRow({ model }: { model: AdherencePlanBudgetModel }) {
