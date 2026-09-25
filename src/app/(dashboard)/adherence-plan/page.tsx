@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ClipboardList, Download, FileText, History, Image as ImageIcon, LoaderCircle, Printer, Search, Send, Trash2 } from "lucide-react";
 import { Button, Card, ErrorState, PageHeader, PageLoader, dateTime } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
-import { adherencePlanService, type AdherencePlanAccountingModel, type AdherencePlanBankAccountGap, type AdherencePlanBudgetModel, type AdherencePlanCgoGap, type AdherencePlanCgoModel, type AdherencePlanItem, type AdherencePlanReportVersion, type AdherencePlanSection, type AdherencePlanSpeciesGap, type AdherencePlanSpeciesModel, type GapSectionCode } from "@/services/adherence-plan.service";
+import { adherencePlanService, type AdherencePlanAccountingModel, type AdherencePlanBankAccountGap, type AdherencePlanBudgetAccountingGap, type AdherencePlanBudgetModel, type AdherencePlanCgoGap, type AdherencePlanCgoModel, type AdherencePlanItem, type AdherencePlanReportVersion, type AdherencePlanSection, type AdherencePlanSpeciesGap, type AdherencePlanSpeciesModel, type GapSectionCode } from "@/services/adherence-plan.service";
 import { FiscalInconsistenciesCard } from "@/components/fiscal-inconsistencies-card";
 
 const POSITIVE = new Set(["OK", "SIM", "CONFIGURADO"]);
@@ -40,6 +40,7 @@ export default function AdherencePlanPage() {
   const accountingGaps = result.data?.accountingGaps ?? [];
   const speciesAccountGaps = result.data?.speciesAccountGaps ?? [];
   const bankAccountGaps = result.data?.bankAccountGaps ?? [];
+  const budgetAccountingGaps = result.data?.budgetAccountingGaps ?? [];
   const cgoModels = result.data?.cgoModels ?? [];
   const speciesModels = result.data?.speciesModels ?? [];
   const accountingModels = result.data?.accountingModels ?? [];
@@ -52,8 +53,8 @@ export default function AdherencePlanPage() {
     section.items.some((item) => `${item.label} ${item.value}`.toLocaleLowerCase("pt-BR").includes(term))
   ), [sections, term]);
   const gaps = sections.filter(sectionHasGap).length;
-  const hasAnyData = sections.length > 0 || cgoGaps.length > 0 || accountingGaps.length > 0 || speciesAccountGaps.length > 0 || bankAccountGaps.length > 0 || cgoModels.length > 0 || speciesModels.length > 0 || accountingModels.length > 0 || budgetModels.length > 0;
-  const hasPrintableGaps = cgoGaps.length > 0 || accountingGaps.length > 0 || bankAccountGaps.length > 0 || speciesAccountGaps.length > 0 || cgoModels.length > 0 || speciesModels.length > 0 || accountingModels.length > 0 || budgetModels.length > 0;
+  const hasAnyData = sections.length > 0 || cgoGaps.length > 0 || accountingGaps.length > 0 || speciesAccountGaps.length > 0 || bankAccountGaps.length > 0 || budgetAccountingGaps.length > 0 || cgoModels.length > 0 || speciesModels.length > 0 || accountingModels.length > 0 || budgetModels.length > 0;
+  const hasPrintableGaps = cgoGaps.length > 0 || accountingGaps.length > 0 || bankAccountGaps.length > 0 || speciesAccountGaps.length > 0 || budgetAccountingGaps.length > 0 || cgoModels.length > 0 || speciesModels.length > 0 || accountingModels.length > 0 || budgetModels.length > 0;
 
   return <>
     <PageHeader title="Plano de Aderência" description="Processos do ERP configurados na base do cliente — use antes do go-live e em reuniões de status." action={hasPrintableGaps ? <Button variant="secondary" onClick={() => window.print()} className="print:hidden"><Printer size={16} />Imprimir lacunas</Button> : undefined} />
@@ -79,6 +80,9 @@ export default function AdherencePlanPage() {
       </GapListSection>
       <GapListSection code="BANK_ACCOUNT_GAPS" title="Contas correntes sem parâmetro contábil" description="Contas correntes ativas sem vínculo contábil (ABAM_FINANCEIROCONF)." total={bankAccountGaps.length}>
         {bankAccountGaps.map((gap) => <BankAccountGapRow key={gap.accountId} gap={gap} />)}
+      </GapListSection>
+      <GapListSection code="BUDGET_ACCOUNTING_GAPS" title="Naturezas de despesa sem contabilização" description="Naturezas de despesa orçamentária cujo próprio parâmetro (RF_PARAMNATNFDESP) não está configurado para gerar contabilização." total={budgetAccountingGaps.length}>
+        {budgetAccountingGaps.map((gap, index) => <BudgetAccountingGapRow key={index} gap={gap} />)}
       </GapListSection>
 
       <GapListSection code="CGO_MODELS" tone="emerald" title="CGOs com modelo configurado" description="Códigos Gerais de Operação já com modelo cadastrado no motor contábil." total={cgoModels.length}>
@@ -243,6 +247,12 @@ function SpeciesGapRow({ gap }: { gap: AdherencePlanSpeciesGap }) {
 }
 function BankAccountGapRow({ gap }: { gap: AdherencePlanBankAccountGap }) {
   return <li className="flex items-center gap-3 p-3 text-sm">{gap.companyNumber && <span className="font-mono text-xs text-slate-500">EMP {gap.companyNumber}</span>}<span className="text-slate-700">{gap.accountDescription || `Conta ${gap.accountId}`}</span></li>;
+}
+function BudgetAccountingGapRow({ gap }: { gap: AdherencePlanBudgetAccountingGap }) {
+  return <li className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm">
+    <div>{gap.companyNumber && <span className="mr-2 font-mono text-xs text-slate-500">EMP {gap.companyNumber}</span>}<span className="font-mono font-semibold text-slate-800">{gap.expenseNatureId}</span>{gap.expenseNatureDescription && <span className="ml-2 text-slate-700">{gap.expenseNatureDescription}</span>}</div>
+    <div className="flex shrink-0 items-center gap-2 text-xs text-slate-500">{gap.cgo && <span>CGO {gap.cgo}</span>}{gap.speciesCode && <span>Espécie {gap.speciesCode}</span>}{gap.operationCode && <span>Operação {gap.operationCode}</span>}</div>
+  </li>;
 }
 function CgoModelRow({ model }: { model: AdherencePlanCgoModel }) {
   return <li className="flex flex-wrap items-center justify-between gap-3 p-3 text-sm">

@@ -13,12 +13,16 @@ export type AdherencePlanBudgetModel = { modelId: string; modelDescription: stri
 // modelo configurado no motor contábil), pedida pelo cliente como complemento de "Operações sem
 // contabilização".
 export type AdherencePlanAccountingModel = { speciesCode: string; speciesDescription: string | null; operationCode: string; operationDescription: string | null };
+// Alerta de configuração próprio (fora do checklist de PA's, pedido do cliente) — natureza de
+// despesa cujo próprio parâmetro (RF_PARAMNATNFDESP.GERCONTABILIZACAO) não gera contabilização.
+export type AdherencePlanBudgetAccountingGap = { expenseNatureId: string; expenseNatureDescription: string | null; companyNumber: string | null; cgo: string | null; speciesCode: string | null; operationCode: string | null; taxationType: string | null; generatesFiscalBook: string | null; generatesFinancialTitle: string | null };
 export type AdherencePlanResult = {
   sections: AdherencePlanSection[];
   cgoGaps: AdherencePlanCgoGap[];
   accountingGaps: AdherencePlanAccountingGap[];
   speciesAccountGaps: AdherencePlanSpeciesGap[];
   bankAccountGaps: AdherencePlanBankAccountGap[];
+  budgetAccountingGaps: AdherencePlanBudgetAccountingGap[];
   cgoModels: AdherencePlanCgoModel[];
   speciesModels: AdherencePlanSpeciesModel[];
   accountingModels: AdherencePlanAccountingModel[];
@@ -27,7 +31,7 @@ export type AdherencePlanResult = {
 };
 // Espelha GAP_SECTION_CODES do backend (adherence-plan.service.ts) — usado pelo botão "Exportar
 // PDF" de cada quadro.
-export const GAP_SECTION_CODES = ["CGO_GAPS", "ACCOUNTING_GAPS", "SPECIES_ACCOUNT_GAPS", "BANK_ACCOUNT_GAPS", "CGO_MODELS", "SPECIES_MODELS", "ACCOUNTING_MODELS", "BUDGET_MODELS"] as const;
+export const GAP_SECTION_CODES = ["CGO_GAPS", "ACCOUNTING_GAPS", "SPECIES_ACCOUNT_GAPS", "BANK_ACCOUNT_GAPS", "BUDGET_ACCOUNTING_GAPS", "CGO_MODELS", "SPECIES_MODELS", "ACCOUNTING_MODELS", "BUDGET_MODELS"] as const;
 export type GapSectionCode = (typeof GAP_SECTION_CODES)[number];
 
 export type AdherencePlanRecipient = { id: string; email: string; name: string | null; createdAt: string };
