@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ChevronDown, Copy, Download, KeyRound, Settings2, ShieldCheck, Upload } from "lucide-react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Card, ErrorState, PageHeader, PageLoader } from "@/components/shared/ui";
 import { commercialService, type ClientServiceCode, type ClientServiceFlag, type ConnectorIdentity } from "@/services/commercial.service";
 import { connectorDesktopService } from "@/services/connector-desktop.service";
@@ -84,7 +84,8 @@ export default function CommercialPortal() {
     {tenantId && (user?.role === "ADMIN" || (isAnalyst && myPermissions.has("COMMERCIAL_CADASTROS_TAB"))) && <TabDropdown title="Usuários do cliente" description="Cadastre, edite e reenvie convites de acesso."><ClientUsersCard tenantId={tenantId} /></TabDropdown>}
     {tenantId && (canInstallConnector || canSeeConnectorTab) && <TabDropdown title="Identidade para o Connector portátil" description="Gere os dados de tenant e a identidade do Connector para o agent-config.seed.json."><ConnectorSeedCard tenantId={tenantId} tenantName={tenantName} tenantSlug={cncCode} /></TabDropdown>}
     </div>}
-    {effectiveTab === "parameters" && <div role="tabpanel" className="max-w-5xl"><TabDropdown title="Serviços contratados" description="Defina as rotinas autorizadas para o cliente." defaultOpen>{tenantId && (canInstallConnector || isAnalyst) ? <ClientServicesCard key={tenantId} tenantId={tenantId} /> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente e confirme seu perfil de administrador para configurar os serviços contratados.</Card>}</TabDropdown></div>}
+    {effectiveTab === "parameters" && <div role="tabpanel" className="max-w-5xl"><TabDropdown title="Serviços contratados" description="Defina as rotinas autorizadas para o cliente." defaultOpen>{tenantId && (canInstallConnector || isAnalyst) ? <ClientServicesCard key={tenantId} tenantId={tenantId} /> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente e confirme seu perfil de administrador para configurar os serviços contratados.</Card>}</TabDropdown>
+      <TabDropdown title="Auditoria" description="Por quanto tempo os registros de auditoria deste cliente ficam disponíveis.">{tenantId && (canInstallConnector || isAnalyst) ? <AuditRetentionCard key={tenantId} tenantId={tenantId} /> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente e confirme seu perfil de administrador para configurar a retenção de auditoria.</Card>}</TabDropdown></div>}
     {effectiveTab === "connector" && <div role="tabpanel" className="max-w-5xl">
     {/* Iniciar/acompanhar cargas saiu daqui — ficou só em /connector-queries ("Carga inicial"),
         que já cobre o mesmo fluxo sem duplicar a chamada de API em duas telas diferentes. */}
@@ -224,4 +225,26 @@ function ClientServicesCard({ tenantId }: { tenantId: string }) {
 }
 
 function FlowOption({ label, description, checked, change }: { label: string; description: string; checked: boolean; change: (checked: boolean) => void }) { return <label className="flex cursor-pointer items-start gap-3 rounded-lg bg-white p-3"><input type="checkbox" className="mt-0.5 size-4 accent-cyan-700" checked={checked} onChange={(event) => change(event.target.checked)} /><span><strong className="block text-xs uppercase tracking-wide text-cyan-700">{label}</strong><span className="mt-1 block text-sm text-slate-700">{description}</span></span></label>; }
+
+const RETENTION_PRESETS = [5, 6, 7, 10];
+
+function AuditRetentionCard({ tenantId }: { tenantId: string }) {
+  const queryClient = useQueryClient();
+  const queryKey = ["commercial", "audit-retention", tenantId];
+  const retention = useQuery({ queryKey, queryFn: commercialService.auditRetention, retry: false });
+  const [years, setYears] = useState<number | null>(null);
+  const current = years ?? retention.data?.years ?? 5;
+  const save = useMutation({ mutationFn: () => commercialService.updateAuditRetention(current), onSuccess: (result) => queryClient.setQueryData(queryKey, result) });
+  return <Card className="p-5">
+    <div className="flex items-start gap-3"><ShieldCheck className="mt-0.5 shrink-0 text-cyan-700" size={23} /><div><p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">Retenção de auditoria</p><h2 className="mt-1 text-lg font-bold text-slate-900">Por quanto tempo manter os registros</h2><p className="mt-1 text-sm text-slate-500">Toda alteração, extração e importação de dados feita neste cliente é registrada com o usuário responsável. Depois deste prazo, os registros são exportados para um arquivo e removidos da consulta ativa.</p></div></div>
+    {retention.isLoading ? <PageLoader label="Carregando prazo atual..." /> : <>
+      <div className="mt-5 flex flex-wrap items-center gap-2">{RETENTION_PRESETS.map((preset) => <Button key={preset} variant={current === preset ? "primary" : "secondary"} onClick={() => setYears(preset)}>{preset} anos</Button>)}
+        <label className="ml-2 flex items-center gap-2 text-sm font-semibold text-slate-700">Outro valor<input type="number" min={1} max={20} value={current} onChange={(event) => setYears(Math.min(20, Math.max(1, Number(event.target.value) || 1)))} className="h-10 w-20 rounded-lg border border-slate-300 px-3 font-normal" /></label>
+      </div>
+      {retention.isError && <p className="mt-3 text-sm text-amber-700">Não foi possível carregar o prazo atual — o valor exibido é o padrão (5 anos).</p>}
+      {save.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(save.error)} /></div>}
+      <div className="mt-4 flex items-center gap-3"><Button onClick={() => save.mutate()} disabled={save.isPending || current === retention.data?.years}>{save.isPending ? "Salvando..." : "Salvar prazo"}</Button>{save.isSuccess && <span className="text-sm font-medium text-emerald-700">Prazo de retenção atualizado.</span>}</div>
+    </>}
+  </Card>;
+}
 

@@ -1,4 +1,4 @@
-import { Bell, ClipboardCheck, ClipboardList, Code2, CreditCard, Database, Gauge, ListChecks, ShieldCheck, Store, Users, Workflow } from "lucide-react";
+import { Bell, ClipboardCheck, ClipboardList, Code2, CreditCard, Database, Gauge, ListChecks, ScrollText, ShieldCheck, Store, Users, Workflow } from "lucide-react";
 
 // Extraído de app-shell.tsx para ser reaproveitado também pelo registro de rotas das abas
 // (tab-registry.ts) sem criar um import circular entre os dois.
@@ -20,6 +20,7 @@ export const navigation = [
   { href: "/catalog-review", label: "Revisão de cadastros", icon: ClipboardCheck, admin: true },
   { href: "/adherence-plan", label: "Plano de aderência", icon: ClipboardList, admin: true },
   { href: "/admin-users", label: "Usuários internos", icon: Users, admin: true },
+  { href: "/audit-logs", label: "Auditoria", icon: ScrollText, admin: true },
 ];
 
 export function navLabel(href: string): string {
