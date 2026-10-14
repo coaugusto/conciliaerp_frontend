@@ -96,12 +96,15 @@ export function TabsProvider({ children }: { children: React.ReactNode }) {
 
   const openTab = useCallback((path: string, options?: { title?: string; activate?: boolean }) => {
     const activate = options?.activate ?? true;
+    // Rota fora do TAB_REGISTRY não vira aba; ativar a chave assim mesmo deixava `activeKey`
+    // apontando pra uma aba inexistente e a área de conteúdo ficava em branco, sem erro nenhum.
+    const known = Boolean(makeTab(path.split("?")[0]));
     setTabs((current) => {
       if (current.some((tab) => tab.key === path)) return current;
       const tab = makeTab(path, options?.title);
       return tab ? [...current, tab] : current;
     });
-    if (activate) {
+    if (activate && known) {
       setActiveKey(path);
       if (path !== pathname) router.push(path);
     }

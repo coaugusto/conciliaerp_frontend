@@ -42,5 +42,8 @@ export const connectorQueriesService = {
   schedule: async (id: string, connectorId: string, companyId: string, parameters: Record<string, unknown> = {}) => (await api.post<ApiResponse<unknown>>(`/connector-queries/${id}/jobs`, { connectorId, companyId, parameters })).data.data,
   createRecurringSchedule: async (id: string, data: { connectorId: string; companyId: string; startAt: string; frequency: "DAILY" | "HOURLY" | "MINUTES"; intervalMinutes?: number; parameters?: Record<string, unknown> }) => (await api.post<ApiResponse<ConnectorSchedule>>(`/connector-queries/${id}/schedules`, { ...data, parameters: data.parameters ?? {} })).data.data,
   setScheduleActive: async (id: string, active: boolean) => (await api.patch<ApiResponse<ConnectorSchedule>>(`/connector-queries/schedules/${id}/active`, { active })).data.data,
+  // Interrompe tudo o que está em andamento para o cliente selecionado — inclusive o que não cabia
+  // na lista dos últimos jobs.
+  cancelActiveJobs: async () => (await api.post<ApiResponse<{ cancelled: number; jobs: Array<{ queryCode: string; previousStatus: string }> }>>("/connector-queries/jobs/cancel-active")).data.data,
   cancelJob: async (jobId: string) => (await api.post<ApiResponse<ConnectorJob>>(`/connector-queries/jobs/${jobId}/cancel`)).data.data,
 };

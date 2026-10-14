@@ -32,6 +32,13 @@ export function TabViewport() {
     </div>}
     <div className="flex-1 px-5 py-8 lg:px-10">
       {!tabs.length && <PageLoader />}
+      {/* Aba ativa que não existe mais (ou rota sem entrada no TAB_REGISTRY) deixava a área
+          totalmente em branco — sem erro, sem aviso. Melhor dizer o que aconteceu. */}
+      {!!tabs.length && !tabs.some((tab) => tab.key === activeKey) && (
+        <div className="p-10 text-center text-sm text-slate-600">
+          Esta tela ainda não está disponível em abas. Escolha uma opção no menu lateral para continuar.
+        </div>
+      )}
       {tabs.map((tab) => {
         const TabComponent = tab.entry.Component;
         return <div key={tab.key} hidden={tab.key !== activeKey}>

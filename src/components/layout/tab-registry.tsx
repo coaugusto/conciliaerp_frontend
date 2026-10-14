@@ -37,6 +37,8 @@ export const TAB_REGISTRY: TabRouteEntry[] = [
   { pattern: /^\/adherence-plan$/, paramNames: [], Component: dynamic(() => import("@/app/(dashboard)/adherence-plan/page"), { ssr: false, loading }), title: () => navLabel("/adherence-plan") },
   { pattern: /^\/tax-impact-simulator$/, paramNames: [], Component: dynamic(() => import("@/app/(dashboard)/tax-impact-simulator/page"), { ssr: false, loading }), title: () => "Simulador de impacto tributário" },
   { pattern: /^\/supplier-portal$/, paramNames: [], Component: dynamic(() => import("@/app/(dashboard)/supplier-portal/page"), { ssr: false, loading }), title: () => "Portal do Fornecedor" },
+  { pattern: /^\/admin-users$/, paramNames: [], Component: dynamic(() => import("@/app/(dashboard)/admin-users/page"), { ssr: false, loading }), title: () => navLabel("/admin-users") },
+  { pattern: /^\/audit-logs$/, paramNames: [], Component: dynamic(() => import("@/app/(dashboard)/audit-logs/page"), { ssr: false, loading }), title: () => navLabel("/audit-logs") },
   { pattern: /^\/profile$/, paramNames: [], Component: dynamic(() => import("@/app/(dashboard)/profile/page"), { ssr: false, loading }), title: () => "Meu perfil" },
   { pattern: /^\/documentation$/, paramNames: [], Component: dynamic(() => import("@/app/(dashboard)/documentation/page"), { ssr: false, loading }), title: () => "Documentação" },
 ];
