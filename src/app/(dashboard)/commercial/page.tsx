@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ChevronDown, Copy, Download, KeyRound, Settings2, ShieldCheck, Upload } from "lucide-react";
+import { ChevronDown, Copy, Download, FileSignature, KeyRound, Settings2, ShieldCheck, Upload } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Card, ErrorState, PageHeader, PageLoader } from "@/components/shared/ui";
 import { commercialService, type ClientServiceCode, type ClientServiceFlag, type ConnectorIdentity } from "@/services/commercial.service";
@@ -84,7 +84,7 @@ export default function CommercialPortal() {
     {tenantId && (user?.role === "ADMIN" || (isAnalyst && myPermissions.has("COMMERCIAL_CADASTROS_TAB"))) && <TabDropdown title="Usuários do cliente" description="Cadastre, edite e reenvie convites de acesso."><ClientUsersCard tenantId={tenantId} /></TabDropdown>}
     {tenantId && (canInstallConnector || canSeeConnectorTab) && <TabDropdown title="Identidade para o Connector portátil" description="Gere os dados de tenant e a identidade do Connector para o agent-config.seed.json."><ConnectorSeedCard tenantId={tenantId} tenantName={tenantName} tenantSlug={cncCode} /></TabDropdown>}
     </div>}
-    {effectiveTab === "parameters" && <div role="tabpanel" className="max-w-5xl"><TabDropdown title="Serviços contratados" description="Defina as rotinas autorizadas para o cliente." defaultOpen>{tenantId && (canInstallConnector || isAnalyst) ? <ClientServicesCard key={tenantId} tenantId={tenantId} /> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente e confirme seu perfil de administrador para configurar os serviços contratados.</Card>}</TabDropdown>
+    {effectiveTab === "parameters" && <div role="tabpanel" className="max-w-5xl"><TabDropdown title="Serviços contratados" description="Defina as rotinas autorizadas para o cliente." defaultOpen>{tenantId && (canInstallConnector || isAnalyst) ? <><ClientServicesCard key={tenantId} tenantId={tenantId} /><ServiceAgreementCard key={`agreement-${tenantId}`} tenantId={tenantId} /></> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente e confirme seu perfil de administrador para configurar os serviços contratados.</Card>}</TabDropdown>
       <TabDropdown title="Auditoria" description="Por quanto tempo os registros de auditoria deste cliente ficam disponíveis.">{tenantId && (canInstallConnector || isAnalyst) ? <AuditRetentionCard key={tenantId} tenantId={tenantId} /> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente e confirme seu perfil de administrador para configurar a retenção de auditoria.</Card>}</TabDropdown></div>}
     {effectiveTab === "connector" && <div role="tabpanel" className="max-w-5xl">
     {/* Iniciar/acompanhar cargas saiu daqui — ficou só em /connector-queries ("Carga inicial"),
@@ -204,6 +204,55 @@ const defaultClientServices: ServiceDefinition[] = [
   { code: "adherence_validation", name: "Validação de Aderência (PA)", description: "Checklist de aderência e lacunas do motor contábil (CGO, espécie×operação, contas correntes, orçamento).", input: "Consultas PA do Consinco", output: "Plano de aderência e lacunas de configuração", enabled: false, inputEnabled: true, outputEnabled: true, implementation: false },
 ];
 const adherenceCodes: ClientServiceCode[] = ["adherence_validation"];
+
+/**
+ * Termo de prestação de serviços e tratamento de dados, montado a partir dos serviços marcados como
+ * contratados. Fica aqui, junto da marcação, porque é o documento que autoriza a extração: o
+ * cliente precisa ver o que será lido do ERP e o que nunca sai do ambiente dele antes de liberar.
+ */
+function ServiceAgreementCard({ tenantId }: { tenantId: string }) {
+  const agreement = useQuery({ queryKey: ["commercial", "service-agreement", tenantId], queryFn: commercialService.serviceAgreement, retry: false });
+  const [recipients, setRecipients] = useState("");
+  const [open, setOpen] = useState(false);
+  const download = useMutation({ mutationFn: () => commercialService.downloadServiceAgreement(`termo-servicos-${agreement.data?.parties.client.cncCode ?? "cliente"}.pdf`) });
+  const send = useMutation({ mutationFn: () => commercialService.sendServiceAgreement(recipients.split(/[,;\s]+/).filter(Boolean)), onSuccess: () => setRecipients("") });
+  if (agreement.isError) return <Card className="mb-5 p-5"><ErrorState message="Não foi possível montar o termo de prestação de serviços." /></Card>;
+  const data = agreement.data;
+  return <Card className="mb-5 p-5">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div className="flex items-start gap-3"><FileSignature className="mt-0.5 shrink-0 text-cyan-700" size={23} /><div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">Contrato</p>
+        <h2 className="mt-1 text-lg font-bold text-slate-900">{data?.title ?? "Termo de Prestação de Serviços e Tratamento de Dados"}</h2>
+        <p className="mt-1 text-sm text-slate-500">Gerado com os serviços contratados acima. Informa quais dados são extraídos do ERP, o que não é compartilhado e o que pode compor a base de produtos.</p>
+      </div></div>
+      <div className="flex flex-wrap gap-2 print:hidden">
+        <Button variant="secondary" disabled={!data || download.isPending} onClick={() => download.mutate()}>{download.isPending ? "Gerando..." : "Baixar PDF"}</Button>
+        <Button variant="secondary" disabled={!data} onClick={() => setOpen(!open)}>Enviar por e-mail</Button>
+        <Button variant="ghost" onClick={() => window.print()}>Imprimir</Button>
+      </div>
+    </div>
+    {open && <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 print:hidden">
+      <label className="grid gap-1 text-sm font-medium text-slate-700">Destinatários (separe por vírgula)
+        <input value={recipients} onChange={(event) => setRecipients(event.target.value)} placeholder="fiscal@cliente.com.br, juridico@cliente.com.br" className="h-9 rounded-md border border-slate-300 px-2 text-sm font-normal" />
+      </label>
+      <div className="mt-3 flex items-center gap-3">
+        <Button disabled={!recipients.trim() || send.isPending} onClick={() => send.mutate()}>{send.isPending ? "Enviando..." : "Enviar termo"}</Button>
+        {send.isSuccess && <span className="text-sm font-medium text-emerald-700">Termo enviado para {send.data?.recipients.join(", ")}.</span>}
+      </div>
+      {send.isError && <p className="mt-2 text-sm text-red-700">{getApiErrorMessage(send.error)}</p>}
+    </div>}
+    {data && <div className="mt-5 border-t border-slate-200 pt-4 text-sm text-slate-700">
+      <p className="text-xs text-slate-500">CONTRATADA: {data.parties.provider.legalName} — {data.parties.provider.document} · CONTRATANTE: {data.parties.client.name} ({data.parties.client.cncCode}) · Emitido em {data.issuedAt}</p>
+      {data.clauses.map((clause) => <div key={clause.title} className="mt-4 print:break-inside-avoid">
+        <h3 className="font-semibold text-slate-900">{clause.title}</h3>
+        {clause.paragraphs.map((paragraph, index) => <p key={index} className="mt-1 text-justify text-slate-600">{paragraph}</p>)}
+        {!!clause.bullets?.length && <ul className="mt-1 list-disc pl-5 text-slate-600">{clause.bullets.map((bullet) => <li key={bullet}>{bullet}</li>)}</ul>}
+      </div>)}
+      <p className="mt-5 text-xs text-slate-500">{data.reviewNote}</p>
+    </div>}
+    {agreement.isLoading && <div className="mt-4"><PageLoader label="Montando o termo..." /></div>}
+  </Card>;
+}
 
 function ClientServicesCard({ tenantId }: { tenantId: string }) {
   const services = useQuery({ queryKey: ["commercial", "client-services", tenantId], queryFn: commercialService.clientServices, retry: false });
