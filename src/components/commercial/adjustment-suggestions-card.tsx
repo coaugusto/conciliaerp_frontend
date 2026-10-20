@@ -45,9 +45,18 @@ export function AdjustmentSuggestionsCard({ tenantId, companyId, tenantName, cnc
   const invalidateCatalog = () => queryClient.invalidateQueries({ queryKey: ["adjustment-catalog", tenantId] });
   const invalidateProposals = () => queryClient.invalidateQueries({ queryKey: ["adjustment-proposals", tenantId] });
   const savePricing = useMutation({ mutationFn: (input: { itemCode: string; estimatedHours: number; hourlyRate: number; actionDescription: string }) => adjustmentSuggestionsService.upsertPricing(input), onSuccess: invalidateCatalog });
+  // Decidido já na montagem do orçamento, porque é como o cliente negocia: pacote fechado entrega
+  // o contrato com as atividades e o valor total, sem abrir horas. Continua alternável depois.
+  const [packagePricing, setPackagePricing] = useState(false);
   const createProposal = useMutation({
-    mutationFn: () => adjustmentSuggestionsService.createProposal({ companyId, items: Object.values(cart).map(({ item, origin, scheduledDate, actionDescription, hourlyRate, serviceMode }) => ({ itemCode: item.itemCode, title: item.title, origin, affected: item.affected, estimatedHours: item.estimatedHours ?? 0, hourlyRate, scheduledDate: scheduledDate || undefined, actionDescription: actionDescription.trim() || undefined, serviceMode: serviceMode ?? undefined })) }),
+    mutationFn: () => adjustmentSuggestionsService.createProposal({ companyId, packagePricing, items: Object.values(cart).map(({ item, origin, scheduledDate, actionDescription, hourlyRate, serviceMode }) => ({ itemCode: item.itemCode, title: item.title, origin, affected: item.affected, estimatedHours: item.estimatedHours ?? 0, hourlyRate, scheduledDate: scheduledDate || undefined, actionDescription: actionDescription.trim() || undefined, serviceMode: serviceMode ?? undefined })) }),
     onSuccess: (created) => { setCart({}); invalidateProposals(); setOpenProposalId(created.id); },
+  });
+  // Alternar entre contrato detalhado e pacote fechado não mexe no orçamento: só muda o que o
+  // cliente vê no contrato impresso.
+  const setPricingMode = useMutation({
+    mutationFn: ({ id, packagePricing }: { id: string; packagePricing: boolean }) => adjustmentSuggestionsService.setProposalPricingMode(id, packagePricing),
+    onSuccess: () => { invalidateProposals(); queryClient.invalidateQueries({ queryKey: ["adjustment-proposal", openProposalId] }); },
   });
   const setStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: AdjustmentProposalStatus }) => adjustmentSuggestionsService.setProposalStatus(id, status),
@@ -96,13 +105,13 @@ export function AdjustmentSuggestionsCard({ tenantId, companyId, tenantName, cnc
             {defaultRates.data && <div className="flex items-center gap-2"><span className="text-xs text-slate-500">Serviço:</span><ServiceModeToggle value={serviceMode} rates={defaultRates.data} onChange={(mode) => setCartMode(item.itemCode, mode, defaultRates.data!)} /></div>}
             <label className="text-xs text-slate-500">O que será feito<textarea value={actionDescription} onChange={(event) => setCartAction(item.itemCode, event.target.value)} rows={2} placeholder="Ex.: Gerar listagem em Excel para exportação e ajuste pelo time de cadastro do cliente; depois reimportar e atualizar os produtos." className="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-800" /></label>
           </li>)}</ul>
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-cyan-200 pt-3"><strong className="text-slate-900">Total: {cartHours}h · {money(cartTotal)}</strong><Button onClick={() => createProposal.mutate()} disabled={createProposal.isPending}>{createProposal.isPending ? "Salvando..." : "Salvar orçamento"}</Button></div>
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-cyan-200 pt-3"><div><strong className="text-slate-900">Total: {cartHours}h · {money(cartTotal)}</strong><label className="mt-1 flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={packagePricing} onChange={(event) => setPackagePricing(event.target.checked)} />Fechar como pacote: o contrato do cliente mostra as atividades e o valor total, sem horas</label></div><Button onClick={() => createProposal.mutate()} disabled={createProposal.isPending}>{createProposal.isPending ? "Salvando..." : "Salvar orçamento"}</Button></div>
           {createProposal.isError && <div className="mt-3"><ErrorState message={getApiErrorMessage(createProposal.error)} /></div>}
         </div>}
       </Card>
     </div>
 
-    {openProposalId && proposalDetail.data && <ProposalDetail proposal={proposalDetail.data} tenantName={tenantName} cncCode={cncCode} onClose={() => setOpenProposalId(null)} onStatus={(status) => setStatus.mutate({ id: proposalDetail.data.id, status })} onDelete={() => removeProposal.mutate(proposalDetail.data.id)} statusPending={setStatus.isPending} deletePending={removeProposal.isPending} />}
+    {openProposalId && proposalDetail.data && <ProposalDetail proposal={proposalDetail.data} tenantName={tenantName} cncCode={cncCode} onClose={() => setOpenProposalId(null)} onStatus={(status) => setStatus.mutate({ id: proposalDetail.data.id, status })} onDelete={() => removeProposal.mutate(proposalDetail.data.id)} onPricingMode={(packagePricing) => setPricingMode.mutate({ id: proposalDetail.data.id, packagePricing })} statusPending={setStatus.isPending} deletePending={removeProposal.isPending} pricingModePending={setPricingMode.isPending} />}
   </>;
 }
 
@@ -173,9 +182,12 @@ function ProposalSummary({ items }: { items: AdjustmentProposalItem[] }) {
   </div>;
 }
 
-function ProposalDetail({ proposal, tenantName, cncCode, onClose, onStatus, onDelete, statusPending, deletePending }: { proposal: AdjustmentProposalDetail; tenantName: string; cncCode: string; onClose: () => void; onStatus: (status: AdjustmentProposalStatus) => void; onDelete: () => void; statusPending: boolean; deletePending: boolean }) {
+function ProposalDetail({ proposal, tenantName, cncCode, onClose, onStatus, onDelete, onPricingMode, statusPending, deletePending, pricingModePending }: { proposal: AdjustmentProposalDetail; tenantName: string; cncCode: string; onClose: () => void; onStatus: (status: AdjustmentProposalStatus) => void; onDelete: () => void; onPricingMode: (packagePricing: boolean) => void; statusPending: boolean; deletePending: boolean; pricingModePending: boolean }) {
   const totalHours = proposal.items.reduce((sum, item) => sum + item.estimatedHours, 0);
   const totalCost = proposal.items.reduce((sum, item) => sum + item.totalCost, 0);
+  // Pacote fechado: o contrato entregue ao cliente mostra o que será feito e o valor total
+  // negociado, sem horas nem valor/hora por item. O orçamento continua detalhado no sistema.
+  const packaged = proposal.packagePricing;
   return <Card className="mb-5 overflow-hidden print:break-inside-avoid">
     <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 p-5 print:hidden">
       <div><p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">Proposta Nº {proposal.proposalNumber}</p><h2 className="mt-1 text-lg font-bold text-slate-900">Contrato de serviço</h2></div>
@@ -183,6 +195,7 @@ function ProposalDetail({ proposal, tenantName, cncCode, onClose, onStatus, onDe
         {proposal.status === "DRAFT" && <Button variant="secondary" onClick={() => onStatus("SENT")} disabled={statusPending}>Marcar como enviada</Button>}
         {proposal.status === "SENT" && <><Button onClick={() => onStatus("ACCEPTED")} disabled={statusPending}>Marcar como aceita</Button><Button variant="secondary" onClick={() => onStatus("REJECTED")} disabled={statusPending}>Marcar como rejeitada</Button></>}
         {proposal.status === "DRAFT" && <Button variant="danger" onClick={onDelete} disabled={deletePending}><Trash2 size={16} />Excluir rascunho</Button>}
+        <label className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700"><input type="checkbox" checked={packaged} disabled={pricingModePending} onChange={(event) => onPricingMode(event.target.checked)} />Pacote fechado (sem horas)</label>
         <Button variant="secondary" onClick={() => window.print()}><Printer size={16} />Gerar contrato</Button>
         <Button variant="ghost" onClick={onClose} aria-label="Fechar"><X size={18} /></Button>
       </div>
@@ -190,9 +203,10 @@ function ProposalDetail({ proposal, tenantName, cncCode, onClose, onStatus, onDe
     <div className="p-5">
       <div className="mb-4 flex items-center gap-2 print:mb-6"><FileText className="text-cyan-700 print:hidden" size={20} /><div><h3 className="text-xl font-bold text-slate-900">Contrato de Serviço <span className="font-mono text-base font-semibold text-cyan-700">Nº {proposal.proposalNumber}</span></h3><p className="text-sm text-slate-500">Cliente: {tenantName} ({cncCode}) · Proposta criada em {dateTime(proposal.createdAt)} · Status: {statusLabel[proposal.status]}</p></div></div>
       <ProposalSummary items={proposal.items} />
-      <h4 className="mb-2 mt-6 text-xs font-bold uppercase tracking-wide text-slate-500">Detalhamento dos serviços</h4>
-      <table className="w-full text-left text-sm"><thead><tr className="border-b border-slate-300 text-xs uppercase text-slate-500">{["Item", "Horas", "Valor/hora", "Total", "Data prevista"].map((label) => <th key={label} className="py-2">{label}</th>)}</tr></thead><tbody>{proposal.items.map((item) => <tr key={item.id} className="border-b border-slate-100 align-top"><td className="py-2"><span className="font-semibold text-slate-800">{itemLabel(item, item.origin)}</span>{item.serviceMode && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{serviceModeLabel[item.serviceMode]}</span>}{item.actionDescription && <p className="mt-1 max-w-md text-xs text-slate-500">{item.actionDescription}</p>}</td><td className="py-2">{item.estimatedHours}h</td><td className="py-2">{money(item.hourlyRate)}</td><td className="py-2 font-semibold">{money(item.totalCost)}</td><td className="py-2">{item.scheduledDate ? dateTime(item.scheduledDate) : "A combinar"}</td></tr>)}</tbody></table>
-      <div className="mt-4 flex justify-end"><strong className="text-lg text-slate-900">Total geral: {totalHours}h · {money(totalCost)}</strong></div>
+      <h4 className="mb-2 mt-6 text-xs font-bold uppercase tracking-wide text-slate-500">{packaged ? "Escopo do pacote" : "Detalhamento dos serviços"}</h4>
+      <table className="w-full text-left text-sm"><thead><tr className="border-b border-slate-300 text-xs uppercase text-slate-500">{(packaged ? ["Atividade", "Data prevista"] : ["Item", "Horas", "Valor/hora", "Total", "Data prevista"]).map((label) => <th key={label} className="py-2">{label}</th>)}</tr></thead><tbody>{proposal.items.map((item) => <tr key={item.id} className="border-b border-slate-100 align-top"><td className="py-2"><span className="font-semibold text-slate-800">{itemLabel(item, item.origin)}</span>{item.serviceMode && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{serviceModeLabel[item.serviceMode]}</span>}{item.actionDescription && <p className="mt-1 max-w-md text-xs text-slate-500">{item.actionDescription}</p>}</td>{!packaged && <><td className="py-2">{item.estimatedHours}h</td><td className="py-2">{money(item.hourlyRate)}</td><td className="py-2 font-semibold">{money(item.totalCost)}</td></>}<td className="py-2">{item.scheduledDate ? dateTime(item.scheduledDate) : "A combinar"}</td></tr>)}</tbody></table>
+      <div className="mt-4 flex justify-end"><strong className="text-lg text-slate-900">{packaged ? `Valor total do pacote: ${money(totalCost)}` : `Total geral: ${totalHours}h · ${money(totalCost)}`}</strong></div>
+      {packaged && <p className="mt-1 text-right text-xs text-slate-500 print:text-slate-600">Pacote fechado: o valor acima cobre todas as atividades listadas, independentemente do tempo empregado.</p>}
       <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 print:break-inside-avoid">
         <h4 className="text-xs font-bold uppercase tracking-wide text-slate-500">Cláusulas contratuais</h4>
         <ol className="mt-2 list-decimal space-y-3 pl-5 leading-6">
