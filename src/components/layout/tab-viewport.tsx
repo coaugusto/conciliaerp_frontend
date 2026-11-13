@@ -21,7 +21,7 @@ class TabErrorBoundary extends Component<{ children: ReactNode }, { error: Error
 export function TabViewport() {
   const { tabs, activeKey, closeTab, activateTab, openTab } = useTabs();
   return <div className="flex min-h-[calc(100vh-72px)] flex-col">
-    {!!tabs.length && <div className="flex items-center gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 px-2 py-1.5">
+    {!!tabs.length && <div data-help="abas" className="flex items-center gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 px-2 py-1.5">
       {tabs.map((tab) => (
         <div key={tab.key} className={cn("group flex shrink-0 items-center gap-1.5 rounded-t-md border border-b-0 px-3 py-1.5 text-xs font-medium", tab.key === activeKey ? "border-slate-200 bg-white text-slate-800" : "border-transparent text-slate-500 hover:bg-slate-100")}>
           <button type="button" onClick={() => activateTab(tab.key)} className="max-w-[14rem] truncate" title={tab.title}>{tab.title}</button>

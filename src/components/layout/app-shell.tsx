@@ -13,6 +13,8 @@ import { navigation } from "./navigation";
 import { TabLink } from "./tab-link";
 import { TabViewport } from "./tab-viewport";
 import { TabsProvider } from "@/providers/tabs-provider";
+import { FieldHelp } from "@/components/help/field-help";
+import { HelpAssistant } from "@/components/help/help-assistant";
 
 type ClientTenant = { id: string; name: string; cncCode: string; tradeName?: string | null };
 
@@ -101,7 +103,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
     <div className="min-h-screen bg-[#f7f8fc] text-slate-800">
       <header className="sticky top-0 z-30 h-[72px] border-b border-slate-200 bg-white">
         <div className="flex h-[61px] items-center gap-3 px-4 lg:gap-5 lg:px-7">
-          <button onClick={() => setMobileMenuOpen(true)} className="rounded p-2 text-slate-600 hover:bg-slate-100 lg:hidden" aria-label="Abrir menu" aria-expanded={mobileMenuOpen}><Menu size={20} /></button>
+          <button data-help="menu" onClick={() => setMobileMenuOpen(true)} className="rounded p-2 text-slate-600 hover:bg-slate-100 lg:hidden" aria-label="Abrir menu" aria-expanded={mobileMenuOpen}><Menu size={20} /></button>
           <Link href="/dashboard" className="flex shrink-0 items-center gap-2.5 text-[#273252]">
             <span className="grid size-8 place-items-center rounded-full bg-[#394a78] text-sm font-bold text-white">C</span>
             {/* Nome completo só cabe a partir de sm — em telas de celular sobra só o círculo "C". */}
@@ -113,14 +115,14 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
               acima de 1024px), mostra um selo compacto clicável que abre o mesmo seletor já
               existente no menu mobile (linhas ~129 abaixo), garantindo que o ambiente ativo
               sempre apareça em algum tamanho de tela. */}
-          <button type="button" onClick={() => setMobileMenuOpen(true)} className="flex min-w-0 max-w-[9rem] items-center gap-1.5 rounded border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600 sm:max-w-[12rem] lg:hidden" aria-label="Trocar ambiente">
+          <button type="button" data-help="ambiente" onClick={() => setMobileMenuOpen(true)} className="flex min-w-0 max-w-[9rem] items-center gap-1.5 rounded border border-slate-300 bg-slate-50 px-2.5 py-1.5 text-xs text-slate-600 sm:max-w-[12rem] lg:hidden" aria-label="Trocar ambiente">
             <span className="shrink-0 font-semibold">Ambiente:</span>
             <span className="min-w-0 truncate font-medium text-slate-800">{tenantSearch || "Selecionar"}</span>
           </button>
-          <label className="hidden w-[21rem] items-center gap-2 rounded border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs text-slate-600 lg:flex"><span className="whitespace-nowrap font-semibold">Ambiente:</span><input type="search" name="concilia-tenant-search" list="concilia-tenant-options" autoComplete="off" data-1p-ignore data-lpignore="true" value={tenantSearch} onChange={event => handleTenantInputChange(event.target.value)} onBlur={event => selectTenantFromSearch(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); selectTenantFromSearch(event.currentTarget.value); } }} placeholder="Digite o nome ou CNC_CODE" aria-label="Buscar ambiente por nome ou CNC_CODE" className="min-w-0 flex-1 bg-transparent font-medium text-slate-800 outline-none"/>{/* Segunda linha da opção: nome fantasia (GE_EMPRESA.FANTASIA, via MAX_EMPRESA_V1) quando a carga
+          <div data-help="ambiente" className="hidden shrink-0 items-center gap-1 lg:flex"><label className="flex w-[21rem] items-center gap-2 rounded border border-slate-300 bg-slate-50 px-3 py-1.5 text-xs text-slate-600"><span className="whitespace-nowrap font-semibold">Ambiente:</span><input type="search" name="concilia-tenant-search" list="concilia-tenant-options" autoComplete="off" data-1p-ignore data-lpignore="true" value={tenantSearch} onChange={event => handleTenantInputChange(event.target.value)} onBlur={event => selectTenantFromSearch(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); selectTenantFromSearch(event.currentTarget.value); } }} placeholder="Digite o nome ou CNC_CODE" aria-label="Buscar ambiente por nome ou CNC_CODE" className="min-w-0 flex-1 bg-transparent font-medium text-slate-800 outline-none"/>{/* Segunda linha da opção: nome fantasia (GE_EMPRESA.FANTASIA, via MAX_EMPRESA_V1) quando a carga
     inicial já extraiu o cadastro da empresa — mais fácil de reconhecer o cliente real do que o
     UUID interno, que só aparece como fallback enquanto isso não acontece. */}
-<datalist id="concilia-tenant-options">{(tenants.data ?? []).map(tenant => <option key={tenant.id} value={`${tenant.name} · ${tenant.cncCode}`}>{tenant.tradeName || tenant.id}</option>)}</datalist></label>
+<datalist id="concilia-tenant-options">{(tenants.data ?? []).map(tenant => <option key={tenant.id} value={`${tenant.name} · ${tenant.cncCode}`}>{tenant.tradeName || tenant.id}</option>)}</datalist></label><FieldHelp screen="portal" field="ambiente" /></div>
           <div className="hidden min-w-0 flex-1 truncate text-xs text-slate-500 xl:block">Início <span className="px-1">›</span> {activeItem?.label ?? "Concilia ERP"}</div>
           <div className="ml-auto flex items-center gap-3 text-xs text-slate-500">
             {user.role === "ADMIN" && <Link href="/documentation" className="hidden items-center gap-1.5 hover:text-[#176a84] md:flex"><BookOpen size={16} className="text-cyan-600" />Documentação</Link>}
@@ -139,13 +141,13 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
                 </div>
               )}
             </div>
-            <Link href="/profile" className="flex items-center gap-1 rounded px-2 py-1.5 hover:bg-slate-100"><span className="hidden text-right sm:block"><b className="block text-sm font-semibold text-slate-700">{user.name}</b><span>{user.role === "ADMIN" ? "Administrador" : user.role === "COMPANY_ADMIN" ? "Administrador do cliente" : "Analista"}</span></span><ChevronDown size={15} /></Link>
-            <button onClick={() => { logout(); router.replace("/login"); }} title="Sair" className="rounded p-2 hover:bg-slate-100"><LogOut size={17} /></button>
+            <div data-help="perfil" className="flex items-center gap-1"><Link href="/profile" className="flex items-center gap-1 rounded px-2 py-1.5 hover:bg-slate-100"><span className="hidden text-right sm:block"><b className="block text-sm font-semibold text-slate-700">{user.name}</b><span>{user.role === "ADMIN" ? "Administrador" : user.role === "COMPANY_ADMIN" ? "Administrador do cliente" : "Analista"}</span></span><ChevronDown size={15} /></Link>
+            <button onClick={() => { logout(); router.replace("/login"); }} title="Sair" className="rounded p-2 hover:bg-slate-100"><LogOut size={17} /></button></div>
           </div>
         </div>
         <div className="h-[11px] border-t border-[#dedcff] bg-[#e8e7ff]" />
       </header>
-      <aside className={cn("fixed bottom-0 left-0 top-[72px] z-20 hidden overflow-y-auto border-r border-[#d9d8ff] bg-white transition-[width] duration-200 lg:block", menuExpanded ? "w-64 shadow-lg" : "w-12")}>
+      <aside data-help="menu" className={cn("fixed bottom-0 left-0 top-[72px] z-20 hidden overflow-y-auto border-r border-[#d9d8ff] bg-white transition-[width] duration-200 lg:block", menuExpanded ? "w-64 shadow-lg" : "w-12")}>
         <nav className={cn("flex flex-col gap-1 py-3", menuExpanded ? "px-2" : "items-center")}>
           <button onClick={() => setMenuExpanded((current) => !current)} className={cn("mb-2 flex h-9 items-center rounded text-cyan-600 hover:bg-cyan-50", menuExpanded ? "w-full gap-3 px-2" : "justify-center p-1.5")} aria-label={menuExpanded ? "Recolher menu" : "Expandir menu"} aria-expanded={menuExpanded}>
             {menuExpanded ? <ChevronLeft size={20} /> : <Menu size={20} />}
@@ -181,6 +183,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
         </div>
       )}
       <main className={cn("transition-[padding] duration-200", menuExpanded ? "lg:pl-64" : "lg:pl-12")}><div className="min-h-[calc(100vh-72px)] border-l-4 border-[#e4e2ff] bg-white"><TabViewport /></div></main>
+      <HelpAssistant />
     </div>
     </TabsProvider>
   );
