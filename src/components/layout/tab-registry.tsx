@@ -21,6 +21,7 @@ const loading = () => <PageLoader />;
 export const TAB_REGISTRY: TabRouteEntry[] = [
   { pattern: /^\/dashboard$/, paramNames: [], Component: dynamic(() => import("@/app/(dashboard)/dashboard/page"), { ssr: false, loading }), title: () => navLabel("/dashboard") },
   { pattern: /^\/commercial$/, paramNames: [], Component: dynamic(() => import("@/app/(dashboard)/commercial/page"), { ssr: false, loading }), title: () => navLabel("/commercial") },
+  { pattern: /^\/bi$/, paramNames: [], Component: dynamic(() => import("@/app/(dashboard)/bi/page"), { ssr: false, loading }), title: () => navLabel("/bi") },
   { pattern: /^\/marketplace$/, paramNames: [], Component: dynamic(() => import("@/app/(dashboard)/marketplace/page"), { ssr: false, loading }), title: () => navLabel("/marketplace") },
   { pattern: /^\/marketplace\/categories$/, paramNames: [], Component: dynamic(() => import("@/app/(dashboard)/marketplace/categories/page"), { ssr: false, loading }), title: () => "Categorias do catálogo mestre" },
   { pattern: /^\/marketplace\/products\/([^/]+)$/, paramNames: ["id"], Component: dynamic(() => import("@/app/(dashboard)/marketplace/products/[id]/page"), { ssr: false, loading }), title: (p) => `Produto ${decodeURIComponent(p.id)}` },
