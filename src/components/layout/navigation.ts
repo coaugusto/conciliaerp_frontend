@@ -1,4 +1,4 @@
-import { BarChart3, Bell, ClipboardCheck, ClipboardList, Code2, CreditCard, Database, Gauge, ListChecks, ScrollText, ShieldCheck, Store, Users, Workflow } from "lucide-react";
+import { BarChart3, Bell, ClipboardCheck, ClipboardList, Code2, CreditCard, Database, Gauge, Landmark, ListChecks, ScrollText, ShieldCheck, Store, Users, Workflow } from "lucide-react";
 
 // Extraído de app-shell.tsx para ser reaproveitado também pelo registro de rotas das abas
 // (tab-registry.ts) sem criar um import circular entre os dois.
@@ -6,6 +6,7 @@ export const navigation = [
   { href: "/dashboard", label: "Painel de conciliações", icon: Gauge },
   { href: "/commercial", label: "Portal do Cliente", icon: CreditCard },
   { href: "/bi", label: "BI Financeiro", icon: BarChart3 },
+  { href: "/reforma-tributaria", label: "Reforma Tributária", icon: Landmark, visibleTo: ["ADMIN", "COMPANY_ADMIN", "ANALYST"] },
   // Ferramenta interna de curadoria de cadastro entre clientes — o admin de UM cliente
   // (COMPANY_ADMIN) não deve ver produtos/tributação de outros clientes aqui.
   { href: "/marketplace", label: "Catálogo mestre", icon: Store, visibleTo: ["ADMIN", "ANALYST"] },
