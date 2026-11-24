@@ -1,6 +1,6 @@
 import { api, type ApiResponse } from "./api/client";
 
-export type AdjustmentOrigin = "FISCAL_ALERT" | "ADHERENCE_GAP";
+export type AdjustmentOrigin = "FISCAL_ALERT" | "ADHERENCE_GAP" | "CONTRACTED_SERVICE";
 export type AdjustmentProposalStatus = "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED";
 export type AdjustmentServiceMode = "REMOTE" | "ONSITE";
 
@@ -16,7 +16,8 @@ export type AdjustmentCatalogItem = {
   actionDescription: string | null;
   configured: boolean;
 };
-export type AdjustmentCatalog = { fiscalAlerts: AdjustmentCatalogItem[]; adherenceGaps: AdjustmentCatalogItem[] };
+// services: serviços vendidos à parte (ex.: BI Financeiro); affected = empresas ativas do cliente.
+export type AdjustmentCatalog = { fiscalAlerts: AdjustmentCatalogItem[]; adherenceGaps: AdjustmentCatalogItem[]; services?: AdjustmentCatalogItem[] };
 export type AdjustmentDefaultRates = { remote: number; onsite: number };
 
 export type AdjustmentProposalItemInput = { itemCode: string; title: string; origin: AdjustmentOrigin; affected: number; estimatedHours: number; hourlyRate: number; scheduledDate?: string; actionDescription?: string; serviceMode?: AdjustmentServiceMode };

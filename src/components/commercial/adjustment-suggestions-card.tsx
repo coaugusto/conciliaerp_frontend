@@ -95,6 +95,7 @@ export function AdjustmentSuggestionsCard({ tenantId, companyId, tenantName, cnc
         {catalog.isLoading && <PageLoader label="Carregando catálogo de ajustes..."/>}
         <CatalogSection title="Alertas fiscais e cadastrais" items={catalog.data?.fiscalAlerts ?? []} origin="FISCAL_ALERT" cart={cart} onToggle={toggleCart} onSavePricing={(itemCode, estimatedHours, hourlyRate, actionDescription) => savePricing.mutate({ itemCode, estimatedHours, hourlyRate, actionDescription })} saving={savePricing.isPending} defaultRates={defaultRates.data} />
         <CatalogSection title="Plano de Aderência (processos não configurados)" items={catalog.data?.adherenceGaps ?? []} origin="ADHERENCE_GAP" cart={cart} onToggle={toggleCart} onSavePricing={(itemCode, estimatedHours, hourlyRate, actionDescription) => savePricing.mutate({ itemCode, estimatedHours, hourlyRate, actionDescription })} saving={savePricing.isPending} defaultRates={defaultRates.data} />
+        <CatalogSection title="Serviços contratáveis" items={catalog.data?.services ?? []} origin="CONTRACTED_SERVICE" cart={cart} onToggle={toggleCart} onSavePricing={(itemCode, estimatedHours, hourlyRate, actionDescription) => savePricing.mutate({ itemCode, estimatedHours, hourlyRate, actionDescription })} saving={savePricing.isPending} defaultRates={defaultRates.data} />
         {!!cartEntries.length && <div className="mt-5 rounded-xl border border-cyan-200 bg-cyan-50/40 p-4">
           <h3 className="font-bold text-slate-900">Itens marcados ({cartEntries.length})</h3>
           <ul className="mt-3 divide-y divide-cyan-100">{cartEntries.map(({ item, origin, scheduledDate, actionDescription, hourlyRate, serviceMode }) => <li key={item.itemCode} className="grid gap-2 py-3 text-sm">
@@ -152,7 +153,7 @@ function CatalogRow({ item, origin, checked, onToggle, onSavePricing, saving, de
   return <li className="grid gap-2 p-3 text-sm">
     <div className="flex flex-wrap items-center gap-3">
       <input type="checkbox" checked={checked} onChange={onToggle} disabled={!item.configured} className="size-4 shrink-0 accent-cyan-700" aria-label={`Selecionar ${item.title}`} />
-      <div className="min-w-48 flex-1"><span className="font-semibold text-slate-800">{itemLabel(item, origin)}</span><span className="ml-2 text-xs text-slate-500">{item.affected} pendente(s){item.severity ? ` · ${item.severity}` : ""}{item.estimatedImpact ? ` · impacto estimado ${money(item.estimatedImpact)}` : ""}</span></div>
+      <div className="min-w-48 flex-1"><span className="font-semibold text-slate-800">{itemLabel(item, origin)}</span><span className="ml-2 text-xs text-slate-500">{origin === "CONTRACTED_SERVICE" ? `${item.affected} empresa(s) ativa(s)` : `${item.affected} pendente(s)`}{item.severity ? ` · ${item.severity}` : ""}{item.estimatedImpact ? ` · impacto estimado ${money(item.estimatedImpact)}` : ""}</span></div>
       <label className="text-xs text-slate-500">Horas<input type="text" inputMode="decimal" value={hours} onChange={(event) => setHours(event.target.value)} className="ml-2 h-8 w-20 rounded-md border border-slate-300 px-2 text-sm" /></label>
       <label className="text-xs text-slate-500">Valor/hora<input type="text" inputMode="decimal" value={rate} onChange={(event) => setRate(event.target.value)} className="ml-2 h-8 w-24 rounded-md border border-slate-300 px-2 text-sm" /></label>
       {defaultRates && <span className="flex gap-1"><button type="button" onClick={() => setRate(String(defaultRates.remote))} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-200">Remoto {money(defaultRates.remote)}</button><button type="button" onClick={() => setRate(String(defaultRates.onsite))} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-200">Presencial {money(defaultRates.onsite)}</button></span>}
@@ -164,7 +165,7 @@ function CatalogRow({ item, origin, checked, onToggle, onSavePricing, saving, de
   </li>;
 }
 
-const originSummaryLabel: Record<AdjustmentOrigin, { title: string; unit: string }> = { FISCAL_ALERT: { title: "Pendências fiscais e cadastrais", unit: "Produtos" }, ADHERENCE_GAP: { title: "Plano de Aderência", unit: "Ocorrências" } };
+const originSummaryLabel: Record<AdjustmentOrigin, { title: string; unit: string }> = { FISCAL_ALERT: { title: "Pendências fiscais e cadastrais", unit: "Produtos" }, ADHERENCE_GAP: { title: "Plano de Aderência", unit: "Ocorrências" }, CONTRACTED_SERVICE: { title: "Serviços contratados", unit: "Empresas" } };
 // Quadro-resumo no topo do contrato: o que foi encontrado, ordenado pelo volume afetado, antes do
 // detalhamento de horas e valores. Usa a quantidade gravada na própria proposta (retrato do momento
 // em que foi orçada), não os alertas atuais — o contrato não pode mudar depois de emitido.
@@ -174,7 +175,7 @@ function ProposalSummary({ items }: { items: AdjustmentProposalItem[] }) {
     .filter((section) => section.rows.length);
   if (!sections.length) return null;
   return <div className="print:break-inside-avoid">
-    <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Resumo das pendências</h4>
+    <h4 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">Resumo da proposta</h4>
     <div className="grid gap-4 md:grid-cols-2 print:grid-cols-2">{sections.map(({ origin, rows }) => <table key={origin} className="w-full self-start text-left text-sm">
       <thead><tr className="border-b border-slate-300 text-xs uppercase text-slate-500"><th className="py-2">{originSummaryLabel[origin].title}</th><th className="py-2 text-right">{originSummaryLabel[origin].unit}</th></tr></thead>
       <tbody>{rows.map((item) => <tr key={item.id} className="border-b border-slate-100"><td className="py-1.5 pr-3 text-slate-800">{itemLabel(item, origin)}</td><td className="py-1.5 text-right font-semibold tabular-nums text-slate-900">{item.affected.toLocaleString("pt-BR")}</td></tr>)}</tbody>

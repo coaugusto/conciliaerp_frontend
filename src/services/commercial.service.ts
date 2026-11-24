@@ -1,6 +1,6 @@
 import { api } from "./api/client";
 export type Plan={id:string;code:string;name:string;description?:string;monthlyPriceCents:number;currency:string;limits:Record<string,number>;features:string[]};
-export type ClientServiceCode="fiscal_registration_reconciliation"|"product_import"|"family_import"|"tax_import"|"tax_table_import"|"supplier_import"|"initial_registration_validation"|"fiscal_monitoring"|"sped_processing"|"implementation_xml_load"|"adherence_validation";
+export type ClientServiceCode="fiscal_registration_reconciliation"|"product_import"|"family_import"|"tax_import"|"tax_table_import"|"supplier_import"|"initial_registration_validation"|"fiscal_monitoring"|"sped_processing"|"implementation_xml_load"|"adherence_validation"|"financial_bi";
 export type ClientServiceFlag={code:ClientServiceCode;name:string;enabled:boolean;inputEnabled:boolean;outputEnabled:boolean};
 export type ConnectorIdentity={connectorId:string;clientId:string;clientSecret:string};
 export type AuditRetention={years:number};
