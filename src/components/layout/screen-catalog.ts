@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
 
-// Código fixo de cada tela, mostrado no selo do canto inferior esquerdo e em toda mensagem de
+// Código fixo de cada tela, mostrado no selo do canto superior direito e em toda mensagem de
 // erro (ErrorState). Serve para o usuário dizer ao suporte exatamente onde o erro apareceu.
 //
 // Regras:

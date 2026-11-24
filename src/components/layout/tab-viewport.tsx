@@ -33,7 +33,9 @@ export function TabViewport() {
       ))}
       <button type="button" onClick={() => openTab("/dashboard")} aria-label="Nova aba" className="ml-1 shrink-0 rounded p-1.5 text-slate-400 hover:bg-slate-100"><Plus size={14} /></button>
     </div>}
-    <div className="flex-1 px-5 py-8 lg:px-10">
+    <div className="relative flex-1 px-5 py-8 lg:px-10">
+      {/* Código da tela ativa no canto superior direito, no respiro acima do cabeçalho da página. */}
+      {activeTab && <ScreenBadge key={activeTab.key} code={activeTab.entry.screen} path={activeTab.path} />}
       {!tabs.length && <PageLoader />}
       {/* Aba ativa que não existe mais (ou rota sem entrada no TAB_REGISTRY) deixava a área
           totalmente em branco — sem erro, sem aviso. Melhor dizer o que aconteceu. */}
@@ -53,6 +55,5 @@ export function TabViewport() {
         </div>;
       })}
     </div>
-    {activeTab && <ScreenBadge key={activeTab.key} code={activeTab.entry.screen} path={activeTab.path} />}
   </div>;
 }

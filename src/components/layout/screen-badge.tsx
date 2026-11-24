@@ -5,7 +5,7 @@ import { Check, Copy, Database, X } from "lucide-react";
 import { useAuth } from "@/providers/providers";
 import { SCREENS, type ScreenCode } from "./screen-catalog";
 
-// Selo discreto no canto inferior esquerdo com o código da tela ativa. Ao clicar, mostra o nome
+// Selo discreto no canto superior direito com o código da tela ativa. Ao clicar, mostra o nome
 // da tela e as tabelas principais (só para a equipe interna; o cliente vê apenas o código, que
 // basta para abrir um chamado).
 export function ScreenBadge({ code, path }: { code: ScreenCode; path: string }) {
@@ -30,8 +30,8 @@ export function ScreenBadge({ code, path }: { code: ScreenCode; path: string }) 
     try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch { /* sem permissão de área de transferência: o texto continua visível */ }
   };
 
-  return <div ref={box} data-help="codigo-tela" className="fixed bottom-3 left-3 z-30 lg:left-[60px]">
-    {open && <div role="dialog" aria-label={`Tela ${code}`} className="absolute bottom-full left-0 mb-2 w-72 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-600 shadow-lg">
+  return <div ref={box} data-help="codigo-tela" className="absolute right-3 top-1.5 z-20 lg:right-5">
+    {open && <div role="dialog" aria-label={`Tela ${code}`} className="absolute right-0 top-full mt-2 w-72 rounded-lg border border-slate-200 bg-white p-3 text-xs text-slate-600 shadow-lg">
       <div className="flex items-start justify-between gap-2">
         <div><p className="font-mono text-sm font-bold text-[#283456]">{code}</p><p className="font-medium text-slate-800">{screen.name}</p></div>
         <button type="button" onClick={() => setOpen(false)} aria-label="Fechar" className="rounded p-1 text-slate-400 hover:bg-slate-100"><X size={14} /></button>
