@@ -8,7 +8,10 @@ export const api = axios.create({ baseURL: process.env.NEXT_PUBLIC_API_URL ?? "h
 export function getApiErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const message = error.response?.data?.error?.message ?? error.response?.data?.message;
-    return Array.isArray(message) ? message.join(", ") : message ?? error.response?.data?.error ?? error.message ?? "Erro ao processar a solicitação.";
+    const text = Array.isArray(message) ? message.join(", ") : message ?? error.response?.data?.error ?? error.message ?? "Erro ao processar a solicitação.";
+    // correlationId da API: localiza a requisição exata no log do servidor.
+    const reference = error.response?.data?.correlationId;
+    return typeof reference === "string" && reference ? `${text} (ref. ${reference.slice(0, 8)})` : text;
   }
   return error instanceof Error ? error.message : "Erro inesperado.";
 }

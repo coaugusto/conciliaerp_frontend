@@ -5,21 +5,24 @@ import { Plus, X } from "lucide-react";
 import { PageLoader } from "@/components/shared/ui";
 import { cn } from "@/utils/cn";
 import { TabRouteContext, useTabs } from "@/providers/tabs-provider";
+import { ScreenContext, type ScreenCode } from "./screen-catalog";
+import { ScreenBadge } from "./screen-badge";
 
 // Isola um erro de renderização de uma aba sem derrubar as outras — várias páginas ficam
 // montadas ao mesmo tempo (só ocultas), então o raio de explosão de um bug é maior que o normal.
-class TabErrorBoundary extends Component<{ children: ReactNode }, { error: Error | null }> {
+class TabErrorBoundary extends Component<{ screen: ScreenCode; children: ReactNode }, { error: Error | null }> {
   state = { error: null as Error | null };
   static getDerivedStateFromError(error: Error) { return { error }; }
-  componentDidCatch(error: Error, info: ErrorInfo) { console.error("Erro ao renderizar aba:", error, info); }
+  componentDidCatch(error: Error, info: ErrorInfo) { console.error(`Erro ao renderizar a tela ${this.props.screen}:`, error, info); }
   render() {
-    if (this.state.error) return <div className="p-10 text-center text-sm text-red-700">Não foi possível carregar esta aba. Feche-a e abra novamente.</div>;
+    if (this.state.error) return <div className="p-10 text-center text-sm text-red-700">Não foi possível carregar esta aba. Feche-a e abra novamente.<span className="mt-1 block text-xs text-red-600">Tela {this.props.screen}: informe este código ao suporte.</span></div>;
     return this.props.children;
   }
 }
 
 export function TabViewport() {
   const { tabs, activeKey, closeTab, activateTab, openTab } = useTabs();
+  const activeTab = tabs.find((tab) => tab.key === activeKey);
   return <div className="flex min-h-[calc(100vh-72px)] flex-col">
     {!!tabs.length && <div data-help="abas" className="flex items-center gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 px-2 py-1.5">
       {tabs.map((tab) => (
@@ -43,10 +46,13 @@ export function TabViewport() {
         const TabComponent = tab.entry.Component;
         return <div key={tab.key} hidden={tab.key !== activeKey}>
           <TabRouteContext.Provider value={{ params: tab.params, search: tab.search }}>
-            <TabErrorBoundary><TabComponent /></TabErrorBoundary>
+            <ScreenContext.Provider value={tab.entry.screen}>
+              <TabErrorBoundary screen={tab.entry.screen}><TabComponent /></TabErrorBoundary>
+            </ScreenContext.Provider>
           </TabRouteContext.Provider>
         </div>;
       })}
     </div>
+    {activeTab && <ScreenBadge key={activeTab.key} code={activeTab.entry.screen} path={activeTab.path} />}
   </div>;
 }

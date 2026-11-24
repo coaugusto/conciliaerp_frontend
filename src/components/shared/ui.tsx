@@ -1,6 +1,7 @@
 "use client";
 import { AlertCircle, CheckCircle2, ChevronRight, CircleAlert, Clock3, Search, X } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { useScreenCode } from "@/components/layout/screen-catalog";
 import type { AlertStatus, ExecutionStatus, Severity } from "@/types";
 export const cnx = cn;
 export function Button({ children, className, variant="primary", ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary"|"secondary"|"ghost"|"danger" }) { const styles={primary:"bg-[#075d70] text-white hover:bg-[#064e5e]",secondary:"border border-[#8ca0b2] bg-white text-slate-700 hover:bg-slate-50",ghost:"text-[#176a84] hover:bg-cyan-50",danger:"bg-red-700 text-white hover:bg-red-800"}; return <button className={cn("inline-flex h-8 shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md px-3 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50",styles[variant],className)} {...props}>{children}</button> }
@@ -12,7 +13,9 @@ export function SeverityBadge({ value }: { value: Severity }) { const d={CRITICA
 export const money = (value:number) => new Intl.NumberFormat("pt-BR",{style:"currency",currency:"BRL"}).format(value);
 export const dateTime = (value:string) => new Intl.DateTimeFormat("pt-BR",{dateStyle:"short",timeStyle:"short",timeZone:"America/Sao_Paulo"}).format(new Date(value));
 export function EmptyState({ title="Nenhum registro encontrado", description="Tente ajustar os filtros ou crie um novo registro." }: {title?:string;description?:string}) { return <div className="p-12 text-center"><div className="mx-auto mb-3 grid size-10 place-items-center rounded-full bg-slate-100"><Search size={18}/></div><p className="font-semibold text-slate-800">{title}</p><p className="mt-1 text-sm text-slate-500">{description}</p></div> }
-export function ErrorState({ message="Não foi possível carregar estas informações." }: {message?:string}) { return <div className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800"><AlertCircle size={18}/>{message}</div> }
+// O código da tela (screen-catalog.ts) vai junto em todo erro, para o usuário poder dizer ao
+// suporte exatamente onde ele apareceu.
+export function ErrorState({ message="Não foi possível carregar estas informações." }: {message?:string}) { const screen = useScreenCode(); return <div role="alert" className="flex items-center gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800"><AlertCircle size={18} className="shrink-0"/><span className="min-w-0 flex-1">{message}</span>{screen && <span title="Código da tela: informe ao suporte" className="shrink-0 rounded bg-red-100 px-1.5 py-0.5 font-mono text-[11px] font-semibold text-red-700">Tela {screen}</span>}</div> }
 /** Indicador de carregamento padrão do ERP — usar sempre que uma tela/seção estiver buscando
  * dado da API, no lugar de texto solto "Carregando..." ou skeletons ad-hoc. PageLoader é para
  * o corpo inteiro de uma tela/card; InlineLoader é para espaços pequenos (dentro de uma célula,

@@ -9,8 +9,8 @@ import { useAuth } from "@/providers/providers";
 import { cn } from "@/utils/cn";
 import { api, type ApiResponse } from "@/services/api/client";
 import { clientContextService } from "@/services/client-context.service";
-import { navigation } from "./navigation";
-import { TabLink } from "./tab-link";
+import { navigation, navigationGroups } from "./navigation";
+import { NavMenu } from "./nav-menu";
 import { TabViewport } from "./tab-viewport";
 import { TabsProvider } from "@/providers/tabs-provider";
 import { FieldHelp } from "@/components/help/field-help";
@@ -83,7 +83,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
   }, [clients.data, companyId]);
   if (!hydrated || !user) return null;
 
-  const visibleNavigation = navigation.filter((item) => (item as { visibleTo?: string[] }).visibleTo ? (item as { visibleTo?: string[] }).visibleTo!.includes(user.role) : (!item.admin || user.role === "ADMIN"));
+  const visibleNavigation = navigation.filter((item) => item.visibleTo ? item.visibleTo.includes(user.role) : (!item.admin || user.role === "ADMIN"));
   const selectTenant = async (id: string) => { const response = await api.post<ApiResponse<{ accessToken: string; tenant: ClientTenant }>>("/auth/select-tenant", { tenantId: id }); const selected = response.data.data; localStorage.setItem("concilia_token", selected.accessToken); localStorage.setItem("concilia_tenant_id", selected.tenant.id); localStorage.setItem("concilia_tenant_name", selected.tenant.name); localStorage.setItem("concilia_cnc_code", selected.tenant.cncCode); localStorage.removeItem("concilia_company_id"); setTenantId(selected.tenant.id); setTenantSearch(`${selected.tenant.name} · ${selected.tenant.cncCode}`); window.location.reload(); };
   const selectTenantFromSearch = async (value: string) => {
     const normalized = value.trim().toLocaleLowerCase("pt-BR");
@@ -123,7 +123,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
     inicial já extraiu o cadastro da empresa — mais fácil de reconhecer o cliente real do que o
     UUID interno, que só aparece como fallback enquanto isso não acontece. */}
 <datalist id="concilia-tenant-options">{(tenants.data ?? []).map(tenant => <option key={tenant.id} value={`${tenant.name} · ${tenant.cncCode}`}>{tenant.tradeName || tenant.id}</option>)}</datalist></label><FieldHelp screen="portal" field="ambiente" /></div>
-          <div className="hidden min-w-0 flex-1 truncate text-xs text-slate-500 xl:block">Início <span className="px-1">›</span> {activeItem?.label ?? "Concilia ERP"}</div>
+          <div className="hidden min-w-0 flex-1 truncate text-xs text-slate-500 xl:block">Início <span className="px-1">›</span> {activeItem?.group && <>{navigationGroups[activeItem.group].label}<span className="px-1">›</span></>}{activeItem?.label ?? "Concilia ERP"}</div>
           <div className="ml-auto flex items-center gap-3 text-xs text-slate-500">
             {user.role === "ADMIN" && <Link href="/documentation" className="hidden items-center gap-1.5 hover:text-[#176a84] md:flex"><BookOpen size={16} className="text-cyan-600" />Documentação</Link>}
             {/* Alerta e tema lado a lado só cabem a partir de sm — abaixo disso se sobrepunham
@@ -153,11 +153,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
             {menuExpanded ? <ChevronLeft size={20} /> : <Menu size={20} />}
             {menuExpanded && <span className="text-sm font-semibold text-slate-600">Menu principal</span>}
           </button>
-          {visibleNavigation.map((item) => {
-            const Icon = item.icon;
-            const active = path === item.href || path.startsWith(`${item.href}/`);
-            return <TabLink key={item.href} href={item.href} title={menuExpanded ? undefined : item.label} className={cn("flex h-10 items-center border-l-[3px] transition", menuExpanded ? "gap-3 px-2.5" : "w-9 justify-center", active ? "border-[#5471bf] bg-[#e6eafc] text-[#405b9e]" : "border-transparent text-[#39a4c2] hover:bg-cyan-50")}><Icon size={18} className="shrink-0" />{menuExpanded && <span className="truncate text-sm font-medium">{item.label}</span>}</TabLink>;
-          })}
+          <NavMenu items={visibleNavigation} path={path} variant={menuExpanded ? "expanded" : "rail"} />
         </nav>
       </aside>
       {mobileMenuOpen && (
@@ -173,11 +169,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
               <input type="search" name="concilia-tenant-search-mobile" list="concilia-tenant-options" autoComplete="off" data-1p-ignore data-lpignore="true" value={tenantSearch} onChange={event => handleTenantInputChange(event.target.value)} onBlur={event => selectTenantFromSearch(event.target.value)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); selectTenantFromSearch(event.currentTarget.value); } }} placeholder="Digite o nome ou CNC_CODE" aria-label="Buscar ambiente por nome ou CNC_CODE" className="min-w-0 flex-1 bg-transparent font-medium text-slate-800 outline-none"/>
             </label>
             <nav className="flex flex-col gap-1 px-2 py-3">
-              {visibleNavigation.map((item) => {
-                const Icon = item.icon;
-                const active = path === item.href || path.startsWith(`${item.href}/`);
-                return <TabLink key={item.href} href={item.href} className={cn("flex h-10 items-center gap-3 rounded border-l-[3px] px-2.5 transition", active ? "border-[#5471bf] bg-[#e6eafc] text-[#405b9e]" : "border-transparent text-[#39a4c2] hover:bg-cyan-50")}><Icon size={18} className="shrink-0" /><span className="truncate text-sm font-medium">{item.label}</span></TabLink>;
-              })}
+              <NavMenu items={visibleNavigation} path={path} variant="mobile" />
             </nav>
           </aside>
         </div>
