@@ -251,7 +251,7 @@ function ServiceAgreementCard({ tenantId }: { tenantId: string }) {
       {send.isError && <p className="mt-2 text-sm text-red-700">{getApiErrorMessage(send.error)}</p>}
     </div>}
     {data && <div className="mt-5 border-t border-slate-200 pt-4 text-sm text-slate-700">
-      <p className="text-xs text-slate-500">CONTRATADA: {data.parties.provider.legalName} — {data.parties.provider.document} · CONTRATANTE: {data.parties.client.name} ({data.parties.client.cncCode}) · Emitido em {data.issuedAt}</p>
+      <p className="text-xs text-slate-500">CONTRATADA: {data.parties.provider.legalName} — {data.parties.provider.document} · CONTRATANTE: {data.parties.client.name}{data.parties.client.document ? ` — CNPJ ${data.parties.client.document}` : ""} · Emitido em {data.issuedAt}</p>
       {data.clauses.map((clause) => <div key={clause.title} className="mt-4 print:break-inside-avoid">
         <h3 className="font-semibold text-slate-900">{clause.title}</h3>
         {clause.paragraphs.map((paragraph, index) => <p key={index} className="mt-1 text-justify text-slate-600">{paragraph}</p>)}

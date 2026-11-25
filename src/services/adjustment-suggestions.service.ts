@@ -25,7 +25,7 @@ export type AdjustmentDefaultRates = { remote: number; onsite: number };
 export type AdjustmentProposalItemInput = { itemCode: string; title: string; origin: AdjustmentOrigin; affected: number; estimatedHours: number; hourlyRate: number; scheduledDate?: string; actionDescription?: string; serviceMode?: AdjustmentServiceMode };
 export type AdjustmentProposalItem = AdjustmentProposalItemInput & { id: string; totalCost: number };
 export type AdjustmentProposalSummary = { id: string; companyId: string | null; proposalNumber: number; status: AdjustmentProposalStatus; createdAt: string; acceptedAt: string | null; itemCount: number; totalHours: number; totalCost: number; packagePricing: boolean };
-export type AdjustmentProposalDetail = { id: string; tenantId: string; companyId: string | null; proposalNumber: number; status: AdjustmentProposalStatus; createdAt: string; acceptedAt: string | null; packagePricing: boolean; items: AdjustmentProposalItem[]; provider?: { legalName: string; document: string; contact: string } };
+export type AdjustmentProposalDetail = { id: string; tenantId: string; companyId: string | null; proposalNumber: number; status: AdjustmentProposalStatus; createdAt: string; acceptedAt: string | null; packagePricing: boolean; items: AdjustmentProposalItem[]; provider?: { legalName: string; document: string; contact: string }; client?: { name: string; document: string | null; tradeName: string | null; cncCode: string } };
 
 export const adjustmentSuggestionsService = {
   catalog: async () => (await api.get<ApiResponse<AdjustmentCatalog>>("/adjustment-suggestions/catalog")).data.data,
