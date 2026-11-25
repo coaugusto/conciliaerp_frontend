@@ -67,7 +67,7 @@ export function AdjustmentSuggestionsCard({ tenantId, companyId, tenantName, cnc
   const toggleCart = (item: AdjustmentCatalogItem, origin: AdjustmentOrigin) => setCart((current) => {
     const next = { ...current };
     if (next[item.itemCode]) delete next[item.itemCode];
-    else next[item.itemCode] = { item, origin, scheduledDate: item.estimatedHours ? suggestedDate(item.estimatedHours) : "", actionDescription: item.actionDescription ?? "", hourlyRate: item.hourlyRate ?? 0, serviceMode: null };
+    else next[item.itemCode] = { item, origin, scheduledDate: item.estimatedHours ? suggestedDate(item.estimatedHours) : "", actionDescription: item.actionDescription ?? "", hourlyRate: item.hourlyRate ?? defaultRates.data?.remote ?? 0, serviceMode: item.hourlyRate == null && defaultRates.data ? "REMOTE" : null };
     return next;
   });
   const setCartDate = (itemCode: string, value: string) => setCart((current) => current[itemCode] ? { ...current, [itemCode]: { ...current[itemCode], scheduledDate: value } } : current);
@@ -149,19 +149,20 @@ function CatalogRow({ item, origin, checked, onToggle, onSavePricing, saving, de
   const [actionDescription, setActionDescription] = useState(item.actionDescription ?? "");
   const parsedHours = parseNumber(hours);
   const parsedRate = parseNumber(rate);
+  const belowMinimum = parsedHours != null && parsedHours < item.minimumHours;
   const dirty = parsedHours !== item.estimatedHours || parsedRate !== item.hourlyRate || actionDescription !== (item.actionDescription ?? "");
   return <li className="grid gap-2 p-3 text-sm">
     <div className="flex flex-wrap items-center gap-3">
-      <input type="checkbox" checked={checked} onChange={onToggle} disabled={!item.configured} className="size-4 shrink-0 accent-cyan-700" aria-label={`Selecionar ${item.title}`} />
+      <input type="checkbox" checked={checked} onChange={onToggle} disabled={!item.estimatedHours} className="size-4 shrink-0 accent-cyan-700" aria-label={`Selecionar ${item.title}`} />
       <div className="min-w-48 flex-1"><span className="font-semibold text-slate-800">{itemLabel(item, origin)}</span><span className="ml-2 text-xs text-slate-500">{origin === "CONTRACTED_SERVICE" ? `${item.affected} empresa(s) ativa(s)` : `${item.affected} pendente(s)`}{item.severity ? ` · ${item.severity}` : ""}{item.estimatedImpact ? ` · impacto estimado ${money(item.estimatedImpact)}` : ""}</span></div>
-      <label className="text-xs text-slate-500">Horas<input type="text" inputMode="decimal" value={hours} onChange={(event) => setHours(event.target.value)} className="ml-2 h-8 w-20 rounded-md border border-slate-300 px-2 text-sm" /></label>
+      <label className="text-xs text-slate-500" title={`Mínimo estimado para este tipo de ajuste: ${item.minimumHours}h`}>Horas<input type="text" inputMode="decimal" value={hours} onChange={(event) => setHours(event.target.value)} className={`ml-2 h-8 w-20 rounded-md border px-2 text-sm ${belowMinimum ? "border-amber-400" : "border-slate-300"}`} /><span className={`ml-1 ${belowMinimum ? "font-semibold text-amber-700" : "text-slate-400"}`}>mín. {item.minimumHours}h</span></label>
       <label className="text-xs text-slate-500">Valor/hora<input type="text" inputMode="decimal" value={rate} onChange={(event) => setRate(event.target.value)} className="ml-2 h-8 w-24 rounded-md border border-slate-300 px-2 text-sm" /></label>
       {defaultRates && <span className="flex gap-1"><button type="button" onClick={() => setRate(String(defaultRates.remote))} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-200">Remoto {money(defaultRates.remote)}</button><button type="button" onClick={() => setRate(String(defaultRates.onsite))} className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600 hover:bg-slate-200">Presencial {money(defaultRates.onsite)}</button></span>}
-      <span className="w-28 shrink-0 text-right font-semibold text-slate-700">{parsedHours != null && parsedRate != null ? money(parsedHours * parsedRate) : "—"}</span>
+      <span className="w-28 shrink-0 text-right font-semibold text-slate-700">{parsedHours != null && (parsedRate ?? defaultRates?.remote) != null ? money(parsedHours * (parsedRate ?? defaultRates!.remote)) : "—"}</span>
       {dirty && <Button variant="secondary" onClick={() => { if (parsedHours != null && parsedRate != null) onSavePricing(item.itemCode, parsedHours, parsedRate, actionDescription); }} disabled={saving || parsedHours == null || parsedRate == null}>{saving ? "Salvando..." : "Salvar"}</Button>}
-      {!item.configured && !dirty && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">Configurar horas/valor</span>}
+      {!item.configured && !dirty && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600" title="Descrição e horas do padrão, iguais para todos os clientes. Salvar grava um valor só para este cliente.">Padrão</span>}
     </div>
-    <label className="text-xs text-slate-500">O que será feito (sugestão salva para próximas propostas)<textarea value={actionDescription} onChange={(event) => setActionDescription(event.target.value)} rows={2} placeholder="Ex.: Gerar listagem em Excel para exportação e ajuste pelo time de cadastro do cliente; depois reimportar e atualizar os produtos." className="mt-1 w-full max-w-2xl rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-800" /></label>
+    <label className="text-xs text-slate-500">O que será feito (padrão para todos os clientes; Salvar grava um texto só para este cliente)<textarea value={actionDescription} onChange={(event) => setActionDescription(event.target.value)} rows={3} placeholder="Ex.: Gerar listagem em Excel para exportação e ajuste pelo time de cadastro do cliente; depois reimportar e atualizar os produtos." className="mt-1 w-full max-w-2xl rounded-md border border-slate-300 px-2 py-1.5 text-sm text-slate-800" /></label>
   </li>;
 }
 
@@ -189,12 +190,27 @@ function ProposalDetail({ proposal, tenantName, cncCode, onClose, onStatus, onDe
   // Pacote fechado: o contrato entregue ao cliente mostra o que será feito e o valor total
   // negociado, sem horas nem valor/hora por item. O orçamento continua detalhado no sistema.
   const packaged = proposal.packagePricing;
+  // Rascunho: horas e "o que será feito" de cada item ainda podem ser ajustados no próprio contrato
+  // antes de enviar ao cliente. Depois de enviado, o contrato fica congelado.
+  const queryClient = useQueryClient();
+  const [edits, setEdits] = useState<Record<string, { hours: string; description: string }> | null>(null);
+  const saveItems = useMutation({
+    mutationFn: () => adjustmentSuggestionsService.updateProposalItems(proposal.id, proposal.items.map((item) => {
+      const edit = edits?.[item.id];
+      return { itemCode: item.itemCode, title: item.title, origin: item.origin, affected: item.affected, estimatedHours: edit ? parseNumber(edit.hours) ?? item.estimatedHours : item.estimatedHours, hourlyRate: item.hourlyRate, scheduledDate: item.scheduledDate ?? undefined, actionDescription: (edit ? edit.description : item.actionDescription ?? "").trim() || undefined, serviceMode: item.serviceMode ?? undefined };
+    })),
+    onSuccess: () => { setEdits(null); void queryClient.invalidateQueries({ queryKey: ["adjustment-proposal", proposal.id] }); void queryClient.invalidateQueries({ queryKey: ["adjustment-proposals"] }); },
+  });
+  const startEditing = () => setEdits(Object.fromEntries(proposal.items.map((item) => [item.id, { hours: String(item.estimatedHours), description: item.actionDescription ?? "" }])));
+  const setEdit = (id: string, patch: Partial<{ hours: string; description: string }>) => setEdits((current) => current ? { ...current, [id]: { ...current[id], ...patch } } : current);
   return <Card className="mb-5 overflow-hidden print:break-inside-avoid">
     <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 p-5 print:hidden">
       <div><p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">Proposta Nº {proposal.proposalNumber}</p><h2 className="mt-1 text-lg font-bold text-slate-900">Contrato de serviço</h2></div>
       <div className="flex flex-wrap gap-2">
         {proposal.status === "DRAFT" && <Button variant="secondary" onClick={() => onStatus("SENT")} disabled={statusPending}>Marcar como enviada</Button>}
         {proposal.status === "SENT" && <><Button onClick={() => onStatus("ACCEPTED")} disabled={statusPending}>Marcar como aceita</Button><Button variant="secondary" onClick={() => onStatus("REJECTED")} disabled={statusPending}>Marcar como rejeitada</Button></>}
+        {proposal.status === "DRAFT" && !edits && <Button variant="secondary" onClick={startEditing}>Editar itens</Button>}
+        {edits && <><Button onClick={() => saveItems.mutate()} disabled={saveItems.isPending}>{saveItems.isPending ? "Salvando..." : "Salvar itens"}</Button><Button variant="secondary" onClick={() => setEdits(null)} disabled={saveItems.isPending}>Cancelar edição</Button></>}
         {proposal.status === "DRAFT" && <Button variant="danger" onClick={onDelete} disabled={deletePending}><Trash2 size={16} />Excluir rascunho</Button>}
         <label className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700"><input type="checkbox" checked={packaged} disabled={pricingModePending} onChange={(event) => onPricingMode(event.target.checked)} />Pacote fechado (sem horas)</label>
         <Button variant="secondary" onClick={() => window.print()}><Printer size={16} />Gerar contrato</Button>
@@ -205,7 +221,8 @@ function ProposalDetail({ proposal, tenantName, cncCode, onClose, onStatus, onDe
       <div className="mb-4 flex items-center gap-2 print:mb-6"><FileText className="text-cyan-700 print:hidden" size={20} /><div><h3 className="text-xl font-bold text-slate-900">Contrato de Serviço <span className="font-mono text-base font-semibold text-cyan-700">Nº {proposal.proposalNumber}</span></h3>{proposal.provider&&<p className="text-sm text-slate-700"><strong>CONTRATADA:</strong> {proposal.provider.legalName} — {proposal.provider.document}, desenvolvedora do Concilia ERP</p>}<p className="text-sm text-slate-500"><strong className="text-slate-700">CONTRATANTE:</strong> {tenantName} ({cncCode}) · Proposta criada em {dateTime(proposal.createdAt)} · Status: {statusLabel[proposal.status]}</p></div></div>
       <ProposalSummary items={proposal.items} />
       <h4 className="mb-2 mt-6 text-xs font-bold uppercase tracking-wide text-slate-500">{packaged ? "Escopo do pacote" : "Detalhamento dos serviços"}</h4>
-      <table className="w-full text-left text-sm"><thead><tr className="border-b border-slate-300 text-xs uppercase text-slate-500">{(packaged ? ["Atividade", "Data prevista"] : ["Item", "Horas", "Valor/hora", "Total", "Data prevista"]).map((label) => <th key={label} className="py-2">{label}</th>)}</tr></thead><tbody>{proposal.items.map((item) => <tr key={item.id} className="border-b border-slate-100 align-top"><td className="py-2"><span className="font-semibold text-slate-800">{itemLabel(item, item.origin)}</span>{item.serviceMode && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{serviceModeLabel[item.serviceMode]}</span>}{item.actionDescription && <p className="mt-1 max-w-md text-xs text-slate-500">{item.actionDescription}</p>}</td>{!packaged && <><td className="py-2">{item.estimatedHours}h</td><td className="py-2">{money(item.hourlyRate)}</td><td className="py-2 font-semibold">{money(item.totalCost)}</td></>}<td className="py-2">{item.scheduledDate ? dateTime(item.scheduledDate) : "A combinar"}</td></tr>)}</tbody></table>
+      <table className="w-full text-left text-sm"><thead><tr className="border-b border-slate-300 text-xs uppercase text-slate-500">{(packaged ? ["Atividade", "Data prevista"] : ["Item", "Horas", "Valor/hora", "Total", "Data prevista"]).map((label) => <th key={label} className="py-2">{label}</th>)}</tr></thead><tbody>{proposal.items.map((item) => <tr key={item.id} className="border-b border-slate-100 align-top"><td className="py-2"><span className="font-semibold text-slate-800">{itemLabel(item, item.origin)}</span>{item.serviceMode && <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">{serviceModeLabel[item.serviceMode]}</span>}{edits ? <textarea aria-label={`O que será feito — ${item.title}`} value={edits[item.id]?.description ?? ""} onChange={(event) => setEdit(item.id, { description: event.target.value })} rows={3} className="mt-1 w-full max-w-md rounded-md border border-slate-300 px-2 py-1.5 text-xs text-slate-800" /> : item.actionDescription && <p className="mt-1 max-w-md text-xs text-slate-500">{item.actionDescription}</p>}</td>{!packaged && <><td className="py-2">{edits ? <input aria-label={`Horas — ${item.title}`} inputMode="decimal" value={edits[item.id]?.hours ?? ""} onChange={(event) => setEdit(item.id, { hours: event.target.value })} className="h-8 w-16 rounded-md border border-slate-300 px-2 text-sm" /> : `${item.estimatedHours}h`}</td><td className="py-2">{money(item.hourlyRate)}</td><td className="py-2 font-semibold">{money(item.totalCost)}</td></>}<td className="py-2">{item.scheduledDate ? dateTime(item.scheduledDate) : "A combinar"}</td></tr>)}</tbody></table>
+      {saveItems.isError && <div className="mt-3 print:hidden"><ErrorState message={getApiErrorMessage(saveItems.error)} /></div>}
       <div className="mt-4 flex justify-end"><strong className="text-lg text-slate-900">{packaged ? `Valor total do pacote: ${money(totalCost)}` : `Total geral: ${totalHours}h · ${money(totalCost)}`}</strong></div>
       {packaged && <p className="mt-1 text-right text-xs text-slate-500 print:text-slate-600">Pacote fechado: o valor acima cobre todas as atividades listadas, independentemente do tempo empregado.</p>}
       <div className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 print:break-inside-avoid">

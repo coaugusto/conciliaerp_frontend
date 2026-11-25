@@ -14,6 +14,8 @@ export type AdjustmentCatalogItem = {
   hourlyRate: number | null;
   totalCost: number | null;
   actionDescription: string | null;
+  // Piso de horas do padrão (igual para todos os clientes).
+  minimumHours: number;
   configured: boolean;
 };
 // services: serviços vendidos à parte (ex.: BI Financeiro); affected = empresas ativas do cliente.

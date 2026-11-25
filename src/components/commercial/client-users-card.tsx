@@ -81,14 +81,15 @@ function PermissionsDialog({ tenantId, user, close }: { tenantId: string; user: 
   </div>;
 }
 
-// Liberação de telas por usuário: o contrato do cliente é o teto (telas sem serviço contratado
-// aparecem desabilitadas) e, dentro dele, você escolhe o que este usuário enxerga. Painel, Meu
-// perfil e Documentação ficam sempre abertos.
+// Liberação de telas por usuário: o contrato do cliente é o teto (tela sem serviço contratado nem
+// aparece na lista) e, dentro dele, você escolhe o que este usuário enxerga. Painel, Meu perfil e
+// Documentação ficam sempre abertos.
 function ScreensDialog({ tenantId, user, close, saved }: { tenantId: string; user: ClientUser; close: () => void; saved: () => void }) {
   const options = useQuery({ queryKey: ["client-user-screens", tenantId], queryFn: () => clientUsersService.screens(tenantId) });
   const [restricted, setRestricted] = useState(Boolean(user.screensRestricted));
   const [selected, setSelected] = useState<string[]>(user.allowedScreens ?? []);
-  const save = useMutation({ mutationFn: () => clientUsersService.updateScreens(tenantId, user.id, { restricted, screens: restricted ? selected.filter(code => options.data?.some(option => option.code === code && option.contracted)) : [] }), onSuccess: saved });
+  const contracted = options.data?.filter(option => option.contracted) ?? [];
+  const save = useMutation({ mutationFn: () => clientUsersService.updateScreens(tenantId, user.id, { restricted, screens: restricted ? selected.filter(code => contracted.some(option => option.code === code)) : [] }), onSuccess: saved });
   const toggle = (code: string, checked: boolean) => setSelected(current => checked ? [...new Set([...current, code])] : current.filter(item => item !== code));
   return <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/40 p-4">
     <div role="dialog" aria-modal="true" aria-labelledby="user-screens" className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl">
@@ -102,11 +103,12 @@ function ScreensDialog({ tenantId, user, close, saved }: { tenantId: string; use
       </div>
       {options.isLoading && <div className="mt-4"><PageLoader label="Carregando telas..." /></div>}
       {options.isError && <div className="mt-4"><ErrorState message="Não foi possível carregar as telas deste cliente." /></div>}
-      {restricted && <div className="mt-3 grid max-h-[45vh] gap-2 overflow-y-auto">
-        {options.data?.map(option => <label key={option.code} className={`flex items-start gap-2 rounded-lg border p-3 text-sm ${option.contracted ? "border-slate-200" : "border-dashed border-slate-200 opacity-60"}`} title={option.contracted ? undefined : "O cliente não contratou o serviço desta tela"}>
-          <input type="checkbox" className="mt-0.5 size-4 accent-cyan-700" disabled={!option.contracted} checked={option.contracted && selected.includes(option.code)} onChange={event => toggle(option.code, event.target.checked)} />
-          <span><b className="block text-slate-800">{option.name} <span className="font-mono text-xs font-normal text-slate-400">{option.code}</span></b><span className="text-slate-500">{option.contracted ? option.description : "Não contratado — contrate em Parâmetros → Serviços contratados para liberar."}</span></span>
+      {restricted && options.data && <div className="mt-3 grid max-h-[45vh] gap-2 overflow-y-auto">
+        {contracted.map(option => <label key={option.code} className="flex items-start gap-2 rounded-lg border border-slate-200 p-3 text-sm">
+          <input type="checkbox" className="mt-0.5 size-4 accent-cyan-700" checked={selected.includes(option.code)} onChange={event => toggle(option.code, event.target.checked)} />
+          <span><b className="block text-slate-800">{option.name} <span className="font-mono text-xs font-normal text-slate-400">{option.code}</span></b><span className="text-slate-500">{option.description}</span></span>
         </label>)}
+        {!contracted.length && <p className="text-sm text-slate-500">Nenhuma tela além do Painel está coberta pelo contrato deste cliente.</p>}
       </div>}
       {save.isError && <div className="mt-3"><ErrorState message="Não foi possível salvar as telas deste usuário." /></div>}
       <div className="mt-4 flex justify-end gap-2"><Button variant="secondary" onClick={close}>Cancelar</Button><Button onClick={() => save.mutate()} disabled={save.isPending || (restricted && !options.data)}>{save.isPending ? "Salvando..." : "Salvar"}</Button></div>
