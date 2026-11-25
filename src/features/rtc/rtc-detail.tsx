@@ -56,7 +56,7 @@ export function RtcDetailPanel({ id, onClose }: { id: string; onClose: () => voi
           </section>
 
           {item.suggestions.length > 0 && <section>
-            <h3 className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase text-slate-500"><Lightbulb size={13} />cClassTrib a que o NCM tem direito <FieldHelp screen="rtc" field="sugestao" /></h3>
+            <h3 className="mb-1 flex items-center gap-1 text-xs font-semibold uppercase text-slate-500"><Lightbulb size={13} />cClassTrib sugeridos para o NCM <FieldHelp screen="rtc" field="sugestao" /></h3>
             <ul className="space-y-2">{item.suggestions.map((suggestion) => <Suggestion key={suggestion.code} info={suggestion} />)}</ul>
           </section>}
 
@@ -78,6 +78,7 @@ export function RtcDetailPanel({ id, onClose }: { id: string; onClose: () => voi
 function Suggestion({ info }: { info: RtcClassInfo }) {
   return <li className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sky-950">
     <p><span className="font-mono font-semibold">{info.code}</span>{info.official && <span> — CST {info.official.cst} · {info.official.description}</span>}</p>
+    {info.code === "000001" && !info.annex && <p className="mt-1 text-xs">Tributação integral, sem benefício: é a correta quando o produto não se enquadra em nenhum anexo de redução da LC 214/2025.</p>}
     {info.annex?.annexText && <p className="mt-1 text-xs">Anexo {info.annex.annexNumber}{info.annex.annexItem ? `, item ${info.annex.annexItem}` : ""} da LC 214/2025: {info.annex.annexText}</p>}
   </li>;
 }
