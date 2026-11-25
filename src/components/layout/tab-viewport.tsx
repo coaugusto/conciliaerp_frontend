@@ -24,18 +24,22 @@ export function TabViewport() {
   const { tabs, activeKey, closeTab, activateTab, openTab } = useTabs();
   const activeTab = tabs.find((tab) => tab.key === activeKey);
   return <div className="flex min-h-[calc(100vh-72px)] flex-col">
-    {!!tabs.length && <div data-help="abas" className="flex items-center gap-1 overflow-x-auto border-b border-slate-200 bg-slate-50 px-2 py-1.5">
-      {tabs.map((tab) => (
-        <div key={tab.key} className={cn("group flex shrink-0 items-center gap-1.5 rounded-t-md border border-b-0 px-3 py-1.5 text-xs font-medium", tab.key === activeKey ? "border-slate-200 bg-white text-slate-800" : "border-transparent text-slate-500 hover:bg-slate-100")}>
-          <button type="button" onClick={() => activateTab(tab.key)} className="max-w-[14rem] truncate" title={tab.title}>{tab.title}</button>
-          <button type="button" onClick={() => closeTab(tab.key)} aria-label={`Fechar aba ${tab.title}`} className="rounded p-0.5 text-slate-400 opacity-0 hover:bg-slate-200 group-hover:opacity-100"><X size={12} /></button>
-        </div>
-      ))}
-      <button type="button" onClick={() => openTab("/dashboard")} aria-label="Nova aba" className="ml-1 shrink-0 rounded p-1.5 text-slate-400 hover:bg-slate-100"><Plus size={14} /></button>
-    </div>}
-    <div className="relative flex-1 px-5 py-8 lg:px-10">
-      {/* Código da tela ativa no canto superior direito, no respiro acima do cabeçalho da página. */}
+    {/* Barra de abas em duas partes: as abas rolam na horizontal e o código da tela ativa fica
+        fixo à direita, com cara de aba. Ele fica fora da área com rolagem porque overflow-x-auto
+        também corta na vertical, o que esconderia o popup do código. */}
+    {!!tabs.length && <div className="flex items-end border-b border-slate-200 bg-slate-50">
+      <div data-help="abas" className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto px-2 py-1.5">
+        {tabs.map((tab) => (
+          <div key={tab.key} className={cn("group flex shrink-0 items-center gap-1.5 rounded-t-md border border-b-0 px-3 py-1.5 text-xs font-medium", tab.key === activeKey ? "border-slate-200 bg-white text-slate-800" : "border-transparent text-slate-500 hover:bg-slate-100")}>
+            <button type="button" onClick={() => activateTab(tab.key)} className="max-w-[14rem] truncate" title={tab.title}>{tab.title}</button>
+            <button type="button" onClick={() => closeTab(tab.key)} aria-label={`Fechar aba ${tab.title}`} className="rounded p-0.5 text-slate-400 opacity-0 hover:bg-slate-200 group-hover:opacity-100"><X size={12} /></button>
+          </div>
+        ))}
+        <button type="button" onClick={() => openTab("/dashboard")} aria-label="Nova aba" className="ml-1 shrink-0 rounded p-1.5 text-slate-400 hover:bg-slate-100"><Plus size={14} /></button>
+      </div>
       {activeTab && <ScreenBadge key={activeTab.key} code={activeTab.entry.screen} path={activeTab.path} />}
+    </div>}
+    <div className="flex-1 px-5 py-8 lg:px-10">
       {!tabs.length && <PageLoader />}
       {/* Aba ativa que não existe mais (ou rota sem entrada no TAB_REGISTRY) deixava a área
           totalmente em branco — sem erro, sem aviso. Melhor dizer o que aconteceu. */}
