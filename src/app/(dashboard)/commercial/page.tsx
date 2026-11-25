@@ -12,6 +12,7 @@ import { useAuth } from "@/providers/providers";
 import { ClientUsersCard } from "@/components/commercial/client-users-card";
 import { AdjustmentSuggestionsCard } from "@/components/commercial/adjustment-suggestions-card";
 import { BillingCard } from "@/components/commercial/billing-card";
+import { SecurityCard } from "@/components/commercial/security-card";
 import { useMyAccessPermissions } from "@/hooks/use-my-access-permissions";
 import { printElement } from "@/utils/print-element";
 
@@ -88,6 +89,7 @@ export default function CommercialPortal() {
     {tenantId && (canInstallConnector || canSeeConnectorTab) && <TabDropdown title="Identidade para o Connector portátil" description="Gere os dados de tenant e a identidade do Connector para o agent-config.seed.json."><ConnectorSeedCard tenantId={tenantId} tenantName={tenantName} tenantSlug={cncCode} /></TabDropdown>}
     </div>}
     {effectiveTab === "parameters" && <div role="tabpanel" className="max-w-5xl"><TabDropdown title="Serviços contratados" description="Defina as rotinas autorizadas para o cliente." defaultOpen>{tenantId && (canInstallConnector || isAnalyst) ? <><ClientServicesCard key={tenantId} tenantId={tenantId} /><ServiceAgreementCard key={`agreement-${tenantId}`} tenantId={tenantId} /></> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente e confirme seu perfil de administrador para configurar os serviços contratados.</Card>}</TabDropdown>
+      {tenantId && canInstallConnector && <TabDropdown title="Segurança" description="Verificação em duas etapas para os usuários deste cliente."><SecurityCard key={`security-${tenantId}`} /></TabDropdown>}
       <TabDropdown title="Auditoria" description="Por quanto tempo os registros de auditoria deste cliente ficam disponíveis.">{tenantId && (canInstallConnector || isAnalyst) ? <AuditRetentionCard key={tenantId} tenantId={tenantId} /> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente e confirme seu perfil de administrador para configurar a retenção de auditoria.</Card>}</TabDropdown></div>}
     {effectiveTab === "connector" && <div role="tabpanel" className="max-w-5xl">
     {/* Iniciar/acompanhar cargas saiu daqui — ficou só em /connector-queries ("Carga inicial"),

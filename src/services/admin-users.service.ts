@@ -12,6 +12,9 @@ export type AdminUser = {
   jobTitle: string | null;
   phone: string | null;
   createdAt: string;
+  twoFactorEnabled?: boolean;
+  lockedUntil?: string | null;
+  lastLoginAt?: string | null;
   tenantMemberships: AdminUserTenantMembership[];
 };
 
@@ -19,5 +22,7 @@ export const adminUsersService = {
   list: async () => (await api.get<ApiResponse<AdminUser[]>>("/admin/users")).data.data,
   tenants: async () => (await api.get<ApiResponse<AdminTenantOption[]>>("/admin/users/tenants")).data.data,
   linkTenant: async (userId: string, tenantId: string) => (await api.post<ApiResponse<unknown>>(`/admin/users/${userId}/tenants`, { tenantId })).data.data,
+  resetTwoFactor: async (userId: string) => (await api.post<ApiResponse<unknown>>(`/admin/users/${userId}/two-factor/reset`)).data.data,
+  unlock: async (userId: string) => (await api.post<ApiResponse<unknown>>(`/admin/users/${userId}/unlock`)).data.data,
   unlinkTenant: async (userId: string, tenantId: string) => (await api.patch<ApiResponse<unknown>>(`/admin/users/${userId}/tenants/${tenantId}`)).data.data,
 };

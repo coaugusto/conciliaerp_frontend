@@ -16,4 +16,8 @@ export function getApiErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : "Erro inesperado.";
 }
 api.interceptors.request.use(config => { if (typeof window !== "undefined") { const token = localStorage.getItem("concilia_token"); const tenantId = localStorage.getItem("concilia_tenant_id"); const companyId = localStorage.getItem("concilia_company_id"); if (token) config.headers.Authorization = `Bearer ${token}`; if (tenantId) config.headers["X-Tenant-Id"] = tenantId; const isClientContextRequest = config.url?.startsWith("/client-context/clients"); if (companyId && !isClientContextRequest) config.headers["X-Company-Id"] = companyId; } return config; });
-api.interceptors.response.use(r => r, error => { if (error.response?.status === 401 && typeof window !== "undefined") { localStorage.removeItem("concilia_token"); localStorage.removeItem("concilia_user"); window.location.assign("/login"); } return Promise.reject(error); });
+// Rotas públicas da autenticação (login, código do 2FA, recuperação de senha) devolvem 401 como
+// resposta normal ("senha inválida", "código inválido"): elas mostram o erro na própria tela, sem
+// derrubar a sessão nem recarregar a página.
+const PUBLIC_AUTH = /\/auth\/(login|2fa\/verify|2fa\/setup\/challenge|password\/|invitations\/)/;
+api.interceptors.response.use(r => r, error => { if (error.response?.status === 401 && typeof window !== "undefined" && !PUBLIC_AUTH.test(error.config?.url ?? "")) { localStorage.removeItem("concilia_token"); localStorage.removeItem("concilia_user"); window.location.assign("/login"); } return Promise.reject(error); });

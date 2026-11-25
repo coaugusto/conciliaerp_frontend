@@ -2,7 +2,8 @@
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Check, KeyRound, ShieldCheck } from "lucide-react";
+import { KeyRound, ShieldCheck } from "lucide-react";
+import { PasswordRules, passwordLooksStrong } from "@/components/auth/password-rules";
 import Link from "next/link";
 import { Button, ErrorState, PageLoader } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
@@ -16,7 +17,7 @@ function AcceptInviteForm() {
   const token = useSearchParams().get("token") ?? "";
   const preview = useQuery({ queryKey: ["invitation-preview", token], queryFn: () => invitationService.preview(token), enabled: !!token, retry: false });
   const [password, setPassword] = useState(""), [confirm, setConfirm] = useState("");
-  const valid = password.length >= 8 && /[A-Z]/.test(password) && /\d/.test(password);
+  const valid = passwordLooksStrong(password);
   const accept = useMutation({ mutationFn: () => invitationService.accept(token, password) });
 
   if (!token) return <Shell><ErrorState message="Link de convite inválido — faltou o token na URL." /></Shell>;
@@ -38,10 +39,7 @@ function AcceptInviteForm() {
       <label className="mt-5 block text-sm font-semibold">Nova senha<input type="password" autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3" /></label>
       <label className="mt-4 block text-sm font-semibold">Confirmar senha<input type="password" autoComplete="new-password" value={confirm} onChange={e => setConfirm(e.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-slate-300 px-3" /></label>
       {confirm && password !== confirm && <p className="mt-2 text-xs text-red-600">As senhas não coincidem.</p>}
-      <div className="mt-4 rounded-lg bg-slate-50 p-3 text-xs text-slate-600">
-        <p className="mb-2 font-semibold">Requisitos da senha</p>
-        {["Ao menos 8 caracteres", "Uma letra maiúscula", "Um número"].map((label, i) => <p key={label} className="flex gap-2 py-0.5"><Check size={14} className={(i === 0 ? password.length >= 8 : i === 1 ? /[A-Z]/.test(password) : /\d/.test(password)) ? "text-emerald-600" : "text-slate-300"} />{label}</p>)}
-      </div>
+      <PasswordRules password={password} />
       <Button disabled={!valid || password !== confirm || accept.isPending} className="mt-6 h-11 w-full">{accept.isPending ? "Ativando..." : "Ativar acesso"}</Button>
     </form>
   </Shell>;
