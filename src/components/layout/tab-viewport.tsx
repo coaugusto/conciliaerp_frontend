@@ -7,6 +7,7 @@ import { cn } from "@/utils/cn";
 import { TabRouteContext, useTabs } from "@/providers/tabs-provider";
 import { ScreenContext, type ScreenCode } from "./screen-catalog";
 import { ScreenBadge } from "./screen-badge";
+import { useMyAccessPermissions } from "@/hooks/use-my-access-permissions";
 
 // Isola um erro de renderização de uma aba sem derrubar as outras — várias páginas ficam
 // montadas ao mesmo tempo (só ocultas), então o raio de explosão de um bug é maior que o normal.
@@ -23,6 +24,8 @@ class TabErrorBoundary extends Component<{ screen: ScreenCode; children: ReactNo
 export function TabViewport() {
   const { tabs, activeKey, closeTab, activateTab, openTab } = useTabs();
   const activeTab = tabs.find((tab) => tab.key === activeKey);
+  const tenantId = typeof window === "undefined" ? "" : localStorage.getItem("concilia_tenant_id") ?? "";
+  const { screenAllowed } = useMyAccessPermissions(tenantId, !!tenantId);
   return <div className="flex min-h-[calc(100vh-72px)] flex-col">
     {/* Barra de abas em duas partes: as abas rolam na horizontal e o código da tela ativa fica
         fixo à direita, com cara de aba. Ele fica fora da área com rolagem porque overflow-x-auto
@@ -53,7 +56,10 @@ export function TabViewport() {
         return <div key={tab.key} hidden={tab.key !== activeKey}>
           <TabRouteContext.Provider value={{ params: tab.params, search: tab.search }}>
             <ScreenContext.Provider value={tab.entry.screen}>
-              <TabErrorBoundary screen={tab.entry.screen}><TabComponent /></TabErrorBoundary>
+              {/* Aba aberta por link ou URL direta de uma tela não liberada: nem monta a página. */}
+              {screenAllowed(tab.entry.screen)
+                ? <TabErrorBoundary screen={tab.entry.screen}><TabComponent /></TabErrorBoundary>
+                : <div className="p-10 text-center text-sm text-slate-600">Esta tela não está liberada para o seu usuário.<span className="mt-1 block text-xs text-slate-500">Peça a liberação ao administrador do seu cliente (tela {tab.entry.screen}).</span></div>}
             </ScreenContext.Provider>
           </TabRouteContext.Provider>
         </div>;

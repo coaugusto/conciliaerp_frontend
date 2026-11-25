@@ -10,6 +10,8 @@ import { cn } from "@/utils/cn";
 import { api, type ApiResponse } from "@/services/api/client";
 import { clientContextService } from "@/services/client-context.service";
 import { navigation, navigationGroups } from "./navigation";
+import { matchRoute } from "./tab-registry";
+import { useMyAccessPermissions } from "@/hooks/use-my-access-permissions";
 import { NavMenu } from "./nav-menu";
 import { TabViewport } from "./tab-viewport";
 import { TabsProvider } from "@/providers/tabs-provider";
@@ -34,6 +36,8 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
   const [tenantSearch, setTenantSearch] = useState(tenantLabelFromStorage);
   const [companyId, setCompanyId] = useState(() => typeof window === "undefined" ? "" : localStorage.getItem("concilia_company_id") ?? "");
   const clients = useQuery({ queryKey: ["client-context", tenantId], queryFn: clientContextService.list, enabled: !!user && !!tenantId });
+  // Telas liberadas a este usuário no cliente ativo (null = todas): o menu só mostra o que abre.
+  const { screenAllowed } = useMyAccessPermissions(tenantId, !!user && !!tenantId);
   const [menuExpanded, setMenuExpanded] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [quickMenuOpen, setQuickMenuOpen] = useState(false);
@@ -83,7 +87,7 @@ export function AppShell({ children: _children }: { children: React.ReactNode })
   }, [clients.data, companyId]);
   if (!hydrated || !user) return null;
 
-  const visibleNavigation = navigation.filter((item) => item.visibleTo ? item.visibleTo.includes(user.role) : (!item.admin || user.role === "ADMIN"));
+  const visibleNavigation = navigation.filter((item) => (item.visibleTo ? item.visibleTo.includes(user.role) : (!item.admin || user.role === "ADMIN")) && screenAllowed(matchRoute(item.href)?.entry.screen ?? ""));
   const selectTenant = async (id: string) => { const response = await api.post<ApiResponse<{ accessToken: string; tenant: ClientTenant }>>("/auth/select-tenant", { tenantId: id }); const selected = response.data.data; localStorage.setItem("concilia_token", selected.accessToken); localStorage.setItem("concilia_tenant_id", selected.tenant.id); localStorage.setItem("concilia_tenant_name", selected.tenant.name); localStorage.setItem("concilia_cnc_code", selected.tenant.cncCode); localStorage.removeItem("concilia_company_id"); setTenantId(selected.tenant.id); setTenantSearch(`${selected.tenant.name} · ${selected.tenant.cncCode}`); window.location.reload(); };
   const selectTenantFromSearch = async (value: string) => {
     const normalized = value.trim().toLocaleLowerCase("pt-BR");

@@ -11,6 +11,7 @@ import { api, getApiErrorMessage, type ApiResponse } from "@/services/api/client
 import { useAuth } from "@/providers/providers";
 import { ClientUsersCard } from "@/components/commercial/client-users-card";
 import { AdjustmentSuggestionsCard } from "@/components/commercial/adjustment-suggestions-card";
+import { BillingCard } from "@/components/commercial/billing-card";
 import { useMyAccessPermissions } from "@/hooks/use-my-access-permissions";
 
 type ClientTenant = { id: string; name: string; cncCode: string };
@@ -37,7 +38,7 @@ export default function CommercialPortal() {
   const [cncCode, setCncCode] = useState(() => typeof window === "undefined" ? "" : localStorage.getItem("concilia_cnc_code") ?? "");
   const [tenants, setTenants] = useState<ClientTenant[]>([]);
   const [newClientName, setNewClientName] = useState("");
-  const [activeTab, setActiveTab] = useState<"registration" | "parameters" | "connector" | "adjustments">("registration");
+  const [activeTab, setActiveTab] = useState<"registration" | "parameters" | "connector" | "adjustments" | "billing">("registration");
   // Concessão pontual (ver /commercial → Usuários do cliente → "Permissões especiais") libera as
   // abas normalmente restritas do ANALYST — sem isto, um analista com a concessão continuaria sem
   // ver a aba, mesmo já liberado no backend.
@@ -63,7 +64,8 @@ export default function CommercialPortal() {
     setCopied(true);
   };
 
-  const allTabs: Array<[typeof activeTab, string]> = [["registration", "Cadastros"], ["parameters", "Parâmetros"], ["connector", "Connector"], ["adjustments", "Sugestão de Ajustes"]];
+  const allTabs: Array<[typeof activeTab, string]> = [["registration", "Cadastros"], ["parameters", "Parâmetros"], ["connector", "Connector"], ["adjustments", "Sugestão de Ajustes"], ["billing", "Financeiro"]];
+  // Financeiro: o ADMIN configura a mensalidade e gera boletos; o administrador do cliente vê as faturas.
   const visibleTabs = isAnalyst ? allTabs.filter(([value]) => value === "parameters" || value === "adjustments" || (value === "registration" && canSeeCadastros) || (value === "connector" && canSeeConnectorTab)) : allTabs;
   const effectiveTab = visibleTabs.some(([value]) => value === activeTab) ? activeTab : visibleTabs[0][0];
 
@@ -121,6 +123,7 @@ export default function CommercialPortal() {
     </Card>
     </TabDropdown>
     </div>}
+    {effectiveTab === "billing" && <div role="tabpanel" className="max-w-5xl">{tenantId ? <BillingCard key={tenantId} canManage={user?.role === "ADMIN"} /> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente para ver a cobrança.</Card>}</div>}
     {effectiveTab === "adjustments" && <div role="tabpanel" className="max-w-5xl">
       {tenantId ? <AdjustmentSuggestionsCard tenantId={tenantId} companyId={companyId} tenantName={tenantName} cncCode={cncCode} /> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente antes de montar a sugestão de ajustes.</Card>}
     </div>}
