@@ -83,11 +83,16 @@ export function AdjustmentSuggestionsCard({ tenantId, companyId, tenantName, cnc
 
   return <>
     <div className="print:hidden">
-      <Card className="mb-5 p-5">
-        <h2 className="font-bold text-slate-900">Propostas de ajuste</h2>
-        <p className="mt-1 text-sm text-slate-500">Orçamentos salvos com o cliente — abra um para revisar, mudar o status ou gerar o contrato.</p>
+      {/* Fechado por padrão: a tela abre direto em "Nova proposta"; a lista fica a um clique. */}
+      <details className="group mb-5 overflow-hidden rounded-xl border border-[#aab8cb] bg-white shadow-[0_1px_2px_rgba(15,23,42,.04)]">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-5 [&::-webkit-details-marker]:hidden">
+          <div><h2 className="font-bold text-slate-900">Propostas de ajuste{proposals.data?.length ? <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">{proposals.data.length}</span> : null}</h2><p className="mt-1 text-sm text-slate-500">Orçamentos salvos com o cliente — abra um para revisar, mudar o status ou gerar o contrato.</p></div>
+          <ChevronDown size={18} className="shrink-0 text-slate-500 transition-transform group-open:rotate-180" />
+        </summary>
+        <div className="border-t border-slate-100 px-5 pb-5">
         {proposals.isLoading ? <PageLoader/> : !proposals.data?.length ? <p className="mt-4 text-sm text-slate-500">Nenhuma proposta criada ainda.</p> : <div className="mt-4 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr className="bg-slate-50 text-xs uppercase text-slate-500">{["Nº", "Criada em", "Status", "Itens", "Horas", "Total", ""].map((label) => <th key={label} className="p-3">{label}</th>)}</tr></thead><tbody>{proposals.data.map((proposal) => <tr key={proposal.id} className="border-t border-slate-100"><td className="p-3 font-mono font-semibold text-slate-700">#{proposal.proposalNumber}</td><td className="p-3">{dateTime(proposal.createdAt)}</td><td className="p-3"><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${statusClass[proposal.status]}`}>{statusLabel[proposal.status]}</span></td><td className="p-3">{proposal.itemCount}</td><td className="p-3">{proposal.totalHours}h</td><td className="p-3 font-semibold">{money(proposal.totalCost)}</td><td className="p-3 text-right"><Button variant="secondary" onClick={() => setOpenProposalId(proposal.id)}>Abrir</Button></td></tr>)}</tbody></table></div>}
-      </Card>
+        </div>
+      </details>
 
       <Card className="mb-5 p-5">
         <div className="flex items-start gap-3"><Calculator className="mt-0.5 text-cyan-700" size={22} /><div><h2 className="font-bold text-slate-900">Nova proposta</h2><p className="mt-1 text-sm text-slate-500">Configure horas e valor/hora de cada item, marque o que o cliente vai fechar agora e salve o orçamento.</p></div></div>
