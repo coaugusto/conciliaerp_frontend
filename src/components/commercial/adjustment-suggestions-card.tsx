@@ -33,7 +33,7 @@ function parseNumber(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function AdjustmentSuggestionsCard({ tenantId, companyId, tenantName, cncCode }: { tenantId: string; companyId?: string; tenantName: string; cncCode: string }) {
+export function AdjustmentSuggestionsCard({ tenantId, companyId, tenantName }: { tenantId: string; companyId?: string; tenantName: string }) {
   const queryClient = useQueryClient();
   const catalog = useQuery({ queryKey: ["adjustment-catalog", tenantId], queryFn: adjustmentSuggestionsService.catalog });
   const proposals = useQuery({ queryKey: ["adjustment-proposals", tenantId], queryFn: adjustmentSuggestionsService.listProposals });

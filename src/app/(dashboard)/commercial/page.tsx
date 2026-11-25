@@ -128,7 +128,7 @@ export default function CommercialPortal() {
     </div>}
     {effectiveTab === "billing" && <div role="tabpanel" className="max-w-5xl">{tenantId ? <BillingCard key={tenantId} canManage={user?.role === "ADMIN"} /> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente para ver a cobrança.</Card>}</div>}
     {effectiveTab === "adjustments" && <div role="tabpanel" className="max-w-5xl">
-      {tenantId ? <AdjustmentSuggestionsCard tenantId={tenantId} companyId={companyId} tenantName={tenantName} cncCode={cncCode} /> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente antes de montar a sugestão de ajustes.</Card>}
+      {tenantId ? <AdjustmentSuggestionsCard tenantId={tenantId} companyId={companyId} tenantName={tenantName} /> : <Card className="p-6 text-sm text-amber-700">Selecione um cliente antes de montar a sugestão de ajustes.</Card>}
     </div>}
   </>;
 }
