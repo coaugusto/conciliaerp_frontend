@@ -13,6 +13,7 @@ import { ClientUsersCard } from "@/components/commercial/client-users-card";
 import { AdjustmentSuggestionsCard } from "@/components/commercial/adjustment-suggestions-card";
 import { BillingCard } from "@/components/commercial/billing-card";
 import { useMyAccessPermissions } from "@/hooks/use-my-access-permissions";
+import { printElement } from "@/utils/print-element";
 
 type ClientTenant = { id: string; name: string; cncCode: string };
 
@@ -224,7 +225,7 @@ function ServiceAgreementCard({ tenantId }: { tenantId: string }) {
   const send = useMutation({ mutationFn: () => commercialService.sendServiceAgreement(recipients.split(/[,;\s]+/).filter(Boolean)), onSuccess: () => setRecipients("") });
   if (agreement.isError) return <Card className="mb-5 p-5"><ErrorState message="Não foi possível montar o termo de prestação de serviços." /></Card>;
   const data = agreement.data;
-  return <Card className="mb-5 p-5">
+  return <Card id="service-agreement-print" className="mb-5 p-5">
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div className="flex items-start gap-3"><FileSignature className="mt-0.5 shrink-0 text-cyan-700" size={23} /><div>
         <p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">Contrato</p>
@@ -234,7 +235,7 @@ function ServiceAgreementCard({ tenantId }: { tenantId: string }) {
       <div className="flex flex-wrap gap-2 print:hidden">
         <Button variant="secondary" disabled={!data || download.isPending} onClick={() => download.mutate()}>{download.isPending ? "Gerando..." : "Baixar PDF"}</Button>
         <Button variant="secondary" disabled={!data} onClick={() => setOpen(!open)}>Enviar por e-mail</Button>
-        <Button variant="ghost" onClick={() => window.print()}>Imprimir</Button>
+        <Button variant="ghost" onClick={() => printElement(document.getElementById("service-agreement-print"), data?.title ?? "Termo de Prestação de Serviços")}>Imprimir</Button>
       </div>
     </div>
     {open && <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 print:hidden">

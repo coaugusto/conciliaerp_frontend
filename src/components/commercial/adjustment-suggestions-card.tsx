@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Calculator, ChevronDown, FileText, Printer, Settings2, Trash2, X } from "lucide-react";
+import { printElement } from "@/utils/print-element";
 import { Button, Card, ErrorState, PageLoader, dateTime, money } from "@/components/shared/ui";
 import { getApiErrorMessage } from "@/services/api/client";
 import { adjustmentSuggestionsService, type AdjustmentCatalogItem, type AdjustmentDefaultRates, type AdjustmentOrigin, type AdjustmentProposalDetail, type AdjustmentProposalItem, type AdjustmentProposalStatus, type AdjustmentServiceMode } from "@/services/adjustment-suggestions.service";
@@ -208,7 +209,7 @@ function ProposalDetail({ proposal, tenantName, cncCode, onClose, onStatus, onDe
   });
   const startEditing = () => setEdits(Object.fromEntries(proposal.items.map((item) => [item.id, { hours: String(item.estimatedHours), description: item.actionDescription ?? "" }])));
   const setEdit = (id: string, patch: Partial<{ hours: string; description: string }>) => setEdits((current) => current ? { ...current, [id]: { ...current[id], ...patch } } : current);
-  return <Card className="mb-5 overflow-hidden print:break-inside-avoid">
+  return <Card id={`proposal-contract-${proposal.id}`} className="mb-5 overflow-hidden print:break-inside-avoid">
     <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-200 p-5 print:hidden">
       <div><p className="text-xs font-semibold uppercase tracking-wide text-cyan-700">Proposta Nº {proposal.proposalNumber}</p><h2 className="mt-1 text-lg font-bold text-slate-900">Contrato de serviço</h2></div>
       <div className="flex flex-wrap gap-2">
@@ -218,7 +219,7 @@ function ProposalDetail({ proposal, tenantName, cncCode, onClose, onStatus, onDe
         {edits && <><Button onClick={() => saveItems.mutate()} disabled={saveItems.isPending}>{saveItems.isPending ? "Salvando..." : "Salvar itens"}</Button><Button variant="secondary" onClick={() => setEdits(null)} disabled={saveItems.isPending}>Cancelar edição</Button></>}
         {proposal.status === "DRAFT" && <Button variant="danger" onClick={onDelete} disabled={deletePending}><Trash2 size={16} />Excluir rascunho</Button>}
         <label className="flex items-center gap-2 rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-700"><input type="checkbox" checked={packaged} disabled={pricingModePending} onChange={(event) => onPricingMode(event.target.checked)} />Pacote fechado (sem horas)</label>
-        <Button variant="secondary" onClick={() => window.print()}><Printer size={16} />Gerar contrato</Button>
+        <Button variant="secondary" disabled={!!edits} title={edits ? "Salve ou cancele a edição antes de gerar o contrato" : undefined} onClick={() => printElement(document.getElementById(`proposal-contract-${proposal.id}`), `Contrato de Serviço Nº ${proposal.proposalNumber} — ${tenantName}`)}><Printer size={16} />Gerar contrato</Button>
         <Button variant="ghost" onClick={onClose} aria-label="Fechar"><X size={18} /></Button>
       </div>
     </div>
